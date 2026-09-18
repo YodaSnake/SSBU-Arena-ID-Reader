@@ -1,0 +1,1 @@
+"""SSBU Arena ID Reader."""

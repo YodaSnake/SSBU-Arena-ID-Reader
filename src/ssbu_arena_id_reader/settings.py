@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+CONFIG_PATH = Path.home() / ".ssbu-arena-id-reader" / "config.json"
+
+MIN_SAMPLE_COUNT = 1
+MAX_SAMPLE_COUNT = 5
+DEFAULT_SAMPLE_COUNT = 1
+
+
+@dataclass(frozen=True)
+class AppSettings:
+    obs_password: str = ""
+    obs_source: str = ""
+    sample_count: int = DEFAULT_SAMPLE_COUNT
+
+
+def load_settings(path: Path = CONFIG_PATH) -> AppSettings:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return AppSettings()
+
+    if not isinstance(data, dict):
+        return AppSettings()
+
+    password = data.get("obs_password")
+    source = data.get("obs_source")
+    sample_count = data.get("sample_count")
+
+    if (
+        type(sample_count) is not int
+        or not MIN_SAMPLE_COUNT <= sample_count <= MAX_SAMPLE_COUNT
+    ):
+        sample_count = DEFAULT_SAMPLE_COUNT
+
+    return AppSettings(
+        obs_password=password if isinstance(password, str) else "",
+        obs_source=source if isinstance(source, str) else "",
+        sample_count=sample_count,
+    )
+
+
+def save_settings(settings: AppSettings, path: Path = CONFIG_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "obs_password": settings.obs_password,
+        "obs_source": settings.obs_source,
+        "sample_count": settings.sample_count,
+    }
+
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temp_path.chmod(0o600)
+    temp_path.replace(path)
+    path.chmod(0o600)

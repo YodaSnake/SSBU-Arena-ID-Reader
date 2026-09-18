@@ -1,0 +1,28 @@
+[project]
+name = "ssbu-arena-id-reader"
+version = "0.1.0"
+description = "Read Super Smash Bros. Ultimate Arena IDs from an OBS source."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "easyocr==1.7.2",
+    "opencv-python-headless>=4.10,<5",
+    "websocket-client>=1.9,<2",
+]
+
+[project.scripts]
+ssbu-arena-id-reader = "ssbu_arena_id_reader.app:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ssbu_arena_id_reader"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+]
