@@ -32,7 +32,7 @@ def test_character_majority_counts_invalid_reads_against_stability() -> None:
 
 def test_sanitize_candidate_keeps_only_ssbu_id_characters() -> None:
     assert sanitize_candidate(" 7k3xy\n") == "7K3XY"
-    assert sanitize_candidate("IOZ") == ""
+    assert sanitize_candidate("AEIOUZ") == ""
 
 
 def test_extract_arena_id_roi_uses_reference_1080p_roi() -> None:

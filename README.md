@@ -22,6 +22,8 @@ The initial version is deliberately small:
 
 The current version has been developed and tested on macOS. Other platforms have not yet been validated.
 
+Arena ID recognition is restricted to the observed 30-character code alphabet `0123456789BCDFGHJKLMNPQRSTVWXY`; `A`, `E`, `I`, `O`, `U`, and `Z` are not treated as valid Arena ID characters.
+
 After the OCR model has been installed locally, normal use does not require Internet access. OBS communication stays on `127.0.0.1:4455`.
 
 After a successful OBS connection, the WebSocket password, selected source, and Reads setting are stored locally in `~/.ssbu-arena-id-reader/config.json` so they do not need to be entered again on every launch. On macOS, the settings file is set to mode `0600`.
@@ -30,7 +32,7 @@ The existing sample-count behavior remains supported internally from 1 to 5, inc
 
 The OBS Source list refreshes automatically when its dropdown is opened, so there is no separate source-refresh step.
 
-After a successful read, the raw Arena ID crop is shown above the OCR result. The Arena ID field is editable, so OCR mistakes can be corrected before pressing **Save Sample**. Samples are stored in the repository-local `template_samples/raw/` directory using the current Arena ID field as the filename, such as `JPQHX.png`. If that name already exists, a numeric suffix such as `JPQHX_002.png` is used instead of overwriting the earlier sample. The raw collection directory is ignored by Git.
+After a captured Arena ID crop is available, it is shown above the OCR result. The Arena ID field is editable, so OCR mistakes can be corrected before pressing **Save Sample**. If OCR cannot produce a valid Arena ID at all, the captured crop remains available and the Arena ID can be entered manually before saving. Samples are stored in the repository-local `template_samples/raw/` directory using the current Arena ID field as the filename, such as `JPQHX.png`. If that name already exists, a numeric suffix such as `JPQHX_002.png` is used instead of overwriting the earlier sample. The raw collection directory is ignored by Git.
 
 ## Setup
 

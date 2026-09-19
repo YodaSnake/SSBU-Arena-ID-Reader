@@ -148,6 +148,7 @@ class ArenaIdApp:
             return
 
         self._last_sample_roi = None
+        self.result_var.set("")
         self._set_busy(True)
         try:
             self.status_var.set("Preparing OCR model...")
@@ -168,6 +169,7 @@ class ArenaIdApp:
                     screenshot = client.get_source_screenshot(source_name)
                     frame = decode_png(screenshot)
                     latest_roi = extract_arena_id_roi(frame)
+                    self._last_sample_roi = latest_roi
                     self._show_sample_preview(latest_roi)
                     self.root.update_idletasks()
                     candidate = self.recognizer.recognize(
@@ -207,7 +209,16 @@ class ArenaIdApp:
                 f"Copied {arena_id} to the clipboard "
                 f"({read_count} {read_label})."
             )
-        except (ObsError, RecognitionError) as exc:
+        except RecognitionError as exc:
+            if self._last_sample_roi is not None:
+                self._show_error(
+                    f"{exc}\n\n"
+                    "The captured crop is still available. "
+                    "Enter the Arena ID manually and press Save Sample."
+                )
+            else:
+                self._show_error(str(exc))
+        except ObsError as exc:
             self._show_error(str(exc))
         except Exception as exc:
             self._show_error(f"Unexpected error: {exc}")

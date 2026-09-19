@@ -48,6 +48,14 @@ class FakeRecognizer:
         return next(self.results)
 
 
+class AlwaysInvalidRecognizer:
+    def ensure_ready(self) -> None:
+        pass
+
+    def recognize(self, image) -> str:
+        return "BAD"
+
+
 def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -> None:
     FakeObsClient.calls = 0
 
@@ -85,6 +93,49 @@ def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -
     assert previews == ["raw-roi", "raw-roi", "raw-roi"]
     assert app._last_sample_roi == "raw-roi"
     assert app.status_var.get() == "Copied JPQHX to the clipboard (3 reads)."
+
+
+def test_failed_ocr_keeps_latest_crop_available_for_manual_save(monkeypatch) -> None:
+    FakeObsClient.calls = 0
+
+    monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
+    monkeypatch.setattr(app_module, "decode_png", lambda data: object())
+    monkeypatch.setattr(
+        app_module,
+        "extract_arena_id_roi",
+        lambda frame: "raw-roi",
+    )
+    monkeypatch.setattr(app_module, "preprocess_roi", lambda roi: roi)
+    monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
+
+    app = ArenaIdApp.__new__(ArenaIdApp)
+    app.root = FakeRoot()
+    app.recognizer = AlwaysInvalidRecognizer()
+    app.password_var = FakeVar("fake-password")
+    app.source_var = FakeVar("キャプボ")
+    app.sample_count_var = FakeVar("1")
+    app.result_var = FakeVar("OLD12")
+    app.status_var = FakeVar()
+    app._last_sample_roi = "old-roi"
+
+    previews = []
+    copied = []
+    errors = []
+    app._show_sample_preview = previews.append
+    app._copy_to_clipboard = copied.append
+    app._save_settings = lambda: None
+    app._set_busy = lambda busy: None
+    app._show_error = errors.append
+
+    app._read_id()
+
+    assert FakeObsClient.calls == 5
+    assert app.result_var.get() == ""
+    assert app._last_sample_roi == "raw-roi"
+    assert previews == ["raw-roi"] * 5
+    assert copied == []
+    assert len(errors) == 1
+    assert "Enter the Arena ID manually and press Save Sample." in errors[0]
 
 
 class FakeSourceBox:
