@@ -9,14 +9,13 @@ import cv2
 
 from .obs_client import ObsClient, ObsError
 from .recognition import (
-    EasyOcrRecognizer,
     RecognitionError,
     character_majority,
     decode_png,
     extract_arena_id_roi,
-    preprocess_roi,
 )
 from .sample_collection import SampleCollectionError, save_template_sample
+from .template_recognizer import TemplateRecognizer
 from .settings import MAX_SAMPLE_COUNT, AppSettings, load_settings, save_settings
 
 SAMPLE_INTERVAL_SECONDS = 0.15
@@ -26,7 +25,7 @@ SAMPLE_PREVIEW_SCALE = 2
 class ArenaIdApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.recognizer = EasyOcrRecognizer()
+        self.recognizer = TemplateRecognizer()
         settings = load_settings()
         self.password_var = tk.StringVar(value=settings.obs_password)
         self.source_var = tk.StringVar(value=settings.obs_source)
@@ -151,7 +150,7 @@ class ArenaIdApp:
         self.result_var.set("")
         self._set_busy(True)
         try:
-            self.status_var.set("Preparing OCR model...")
+            self.status_var.set("Preparing Arena ID recognizer...")
             self.root.update_idletasks()
             self.recognizer.ensure_ready()
 
@@ -173,7 +172,7 @@ class ArenaIdApp:
                     self._show_sample_preview(latest_roi)
                     self.root.update_idletasks()
                     candidate = self.recognizer.recognize(
-                        preprocess_roi(latest_roi)
+                        latest_roi
                     )
                     candidates.append(candidate)
 
@@ -191,7 +190,7 @@ class ArenaIdApp:
 
             if arena_id is None:
                 raise RecognitionError(
-                    "OCR samples did not reach a stable character majority."
+                    "Recognition samples did not reach a stable character majority."
                 )
 
             if latest_roi is None:

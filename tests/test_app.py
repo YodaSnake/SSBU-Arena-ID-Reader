@@ -66,7 +66,6 @@ def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -
         "extract_arena_id_roi",
         lambda frame: "raw-roi",
     )
-    monkeypatch.setattr(app_module, "preprocess_roi", lambda roi: roi)
     monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
 
     app = ArenaIdApp.__new__(ArenaIdApp)
@@ -95,7 +94,9 @@ def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -
     assert app.status_var.get() == "Copied JPQHX to the clipboard (3 reads)."
 
 
-def test_failed_ocr_keeps_latest_crop_available_for_manual_save(monkeypatch) -> None:
+def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
+    monkeypatch,
+) -> None:
     FakeObsClient.calls = 0
 
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
@@ -105,7 +106,6 @@ def test_failed_ocr_keeps_latest_crop_available_for_manual_save(monkeypatch) -> 
         "extract_arena_id_roi",
         lambda frame: "raw-roi",
     )
-    monkeypatch.setattr(app_module, "preprocess_roi", lambda roi: roi)
     monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
 
     app = ArenaIdApp.__new__(ArenaIdApp)
@@ -207,7 +207,7 @@ class FakeButton:
         self.state = state
 
 
-def test_save_sample_uses_current_ocr_result_and_consumes_latest_roi(
+def test_save_sample_uses_current_recognition_result_and_consumes_latest_roi(
     monkeypatch,
 ) -> None:
     saved = []

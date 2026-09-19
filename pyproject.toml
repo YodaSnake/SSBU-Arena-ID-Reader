@@ -7,7 +7,6 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "easyocr==1.7.2",
     "opencv-python-headless>=4.10,<5",
     "websocket-client>=1.9,<2",
 ]

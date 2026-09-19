@@ -1,0 +1,44 @@
+Bundled SSBU Arena ID character templates.
+
+The base template bank contains one template for each observed valid Arena ID
+character. Characters 5 and 6 have two additional variants because development
+evaluation showed a recurring 5/6 ambiguity that was resolved by median
+aggregation across three templates.
+
+Format:
+character variant source-image left right
+
+0 base 7X0VP.png 47 63
+1 base 3V1RV.png 48 59
+2 base 5F2LG.png 46 63
+3 base JS3J4.png 52 69
+4 base 8W4P2.png 46 64
+5 base NN544.png 47 64
+6 base M6LY2.png 36 52
+7 base 1L7DQ.png 42 58
+8 base 028FW.png 42 58
+9 base 8Q920.png 47 64
+B base 3XB1W.png 40 57
+C base 2KC7V.png 46 63
+D base 11D88.png 45 63
+F base 4WFV8.png 49 63
+G base MCGL4.png 47 65
+H base 2DHLS.png 46 64
+J base 09JVQ.png 49 60
+K base 8YKHL.png 46 64
+L base 45LHH.png 44 59
+M base 5BMRX.png 42 62
+N base 18NPV.png 45 62
+P base 8SPVJ.png 53 69
+Q base 54Q9V.png 44 63
+R base 3LRB8.png 46 63
+S base 1HSLY.png 52 68
+T base 91TRM.png 41 58
+V base 4YVNS.png 43 61
+W base 2VWXQ.png 39 63
+X base 1BXYW.png 42 58
+Y base B0YL0.png 49 66
+5 alt1 5BMRX.png 7 24
+5 alt2 54Q9V.png 11 27
+6 alt1 69RM2.png 6 23
+6 alt2 F6D7H.png 25 42
