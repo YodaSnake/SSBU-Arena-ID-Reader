@@ -9,7 +9,7 @@ import numpy as np
 ALLOWED_CHARS = "0123456789ABCDEFGHJKLMNPQRSTUVWXY"
 ARENA_ID_LENGTH = 5
 MODEL_FILENAME = "english_g2.pth"
-ROI_1080P = (1798, 100, 1920, 130)
+ROI_1080P = (1790, 100, 1920, 130)
 ROI_BASE_SIZE = (1920, 1080)
 
 
@@ -24,7 +24,7 @@ def decode_png(data: bytes) -> np.ndarray:
     return image
 
 
-def preprocess_frame(frame: np.ndarray) -> np.ndarray:
+def extract_arena_id_roi(frame: np.ndarray) -> np.ndarray:
     height, width = frame.shape[:2]
     base_width, base_height = ROI_BASE_SIZE
     x1, y1, x2, y2 = ROI_1080P
@@ -35,9 +35,17 @@ def preprocess_frame(frame: np.ndarray) -> np.ndarray:
     crop = frame[top:bottom, left:right]
     if crop.size == 0:
         raise RecognitionError("The Arena ID crop area is empty.")
+    return crop.copy()
+
+
+def preprocess_roi(crop: np.ndarray) -> np.ndarray:
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     inverted = cv2.bitwise_not(gray)
     return cv2.resize(inverted, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+
+
+def preprocess_frame(frame: np.ndarray) -> np.ndarray:
+    return preprocess_roi(extract_arena_id_roi(frame))
 
 
 def sanitize_candidate(text: str) -> str:

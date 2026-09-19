@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import time
 import tkinter as tk
 from tkinter import messagebox, ttk
+
+import cv2
 
 from .obs_client import ObsClient, ObsError
 from .recognition import (
@@ -10,12 +13,14 @@ from .recognition import (
     RecognitionError,
     character_majority,
     decode_png,
-    preprocess_frame,
+    extract_arena_id_roi,
+    preprocess_roi,
 )
+from .sample_collection import SampleCollectionError, save_template_sample
 from .settings import MAX_SAMPLE_COUNT, AppSettings, load_settings, save_settings
 
-SAMPLE_COUNT_OPTIONS = tuple(str(count) for count in range(1, MAX_SAMPLE_COUNT + 1))
 SAMPLE_INTERVAL_SECONDS = 0.15
+SAMPLE_PREVIEW_SCALE = 2
 
 
 class ArenaIdApp:
@@ -37,6 +42,8 @@ class ArenaIdApp:
 
         self.status_var = tk.StringVar(value=initial_status)
         self._refreshing_sources = False
+        self._last_sample_roi = None
+        self._sample_preview_image = None
 
         self.root.title("SSBU Arena ID Reader")
         self.root.resizable(False, False)
@@ -66,31 +73,23 @@ class ArenaIdApp:
         )
         self.source_box.grid(row=3, column=0, sticky="ew", pady=(4, 12))
 
-        ttk.Label(frame, text="Reads").grid(row=4, column=0, sticky="w")
-        self.sample_count_box = ttk.Combobox(
-            frame,
-            textvariable=self.sample_count_var,
-            values=SAMPLE_COUNT_OPTIONS,
-            state="readonly",
-            width=31,
-        )
-        self.sample_count_box.grid(row=5, column=0, sticky="ew", pady=(4, 16))
-
         self.read_button = ttk.Button(
             frame,
             text="Read ID",
             command=self._read_id,
         )
-        self.read_button.grid(row=6, column=0, sticky="ew", pady=(0, 16))
+        self.read_button.grid(row=4, column=0, sticky="ew", pady=(0, 12))
 
-        ttk.Label(frame, text="Arena ID").grid(row=7, column=0, sticky="w")
+        self.preview_label = ttk.Label(frame)
+        self.preview_label.grid(row=5, column=0, pady=(0, 12))
+
+        ttk.Label(frame, text="Arena ID").grid(row=6, column=0, sticky="w")
         result_row = ttk.Frame(frame)
-        result_row.grid(row=8, column=0, sticky="ew", pady=(4, 12))
+        result_row.grid(row=7, column=0, sticky="ew", pady=(4, 12))
 
         ttk.Entry(
             result_row,
             textvariable=self.result_var,
-            state="readonly",
             justify="center",
             width=22,
         ).grid(row=0, column=0, sticky="ew")
@@ -102,11 +101,19 @@ class ArenaIdApp:
         )
         self.copy_button.grid(row=0, column=1, padx=(8, 0))
 
+        self.save_sample_button = ttk.Button(
+            result_row,
+            text="Save Sample",
+            command=self._save_sample,
+            state="disabled",
+        )
+        self.save_sample_button.grid(row=0, column=2, padx=(8, 0))
+
         ttk.Label(
             frame,
             textvariable=self.status_var,
             wraplength=320,
-        ).grid(row=9, column=0, sticky="w")
+        ).grid(row=8, column=0, sticky="w")
 
     def _refresh_sources(self) -> None:
         if self._refreshing_sources:
@@ -140,6 +147,7 @@ class ArenaIdApp:
             self._show_error("Select an OBS source first.")
             return
 
+        self._last_sample_roi = None
         self._set_busy(True)
         try:
             self.status_var.set("Preparing OCR model...")
@@ -149,6 +157,7 @@ class ArenaIdApp:
             initial_reads = int(self.sample_count_var.get())
             candidates: list[str] = []
             arena_id: str | None = None
+            latest_roi = None
 
             with ObsClient(self.password_var.get()) as client:
                 for index in range(MAX_SAMPLE_COUNT):
@@ -158,8 +167,11 @@ class ArenaIdApp:
 
                     screenshot = client.get_source_screenshot(source_name)
                     frame = decode_png(screenshot)
+                    latest_roi = extract_arena_id_roi(frame)
+                    self._show_sample_preview(latest_roi)
+                    self.root.update_idletasks()
                     candidate = self.recognizer.recognize(
-                        preprocess_frame(frame)
+                        preprocess_roi(latest_roi)
                     )
                     candidates.append(candidate)
 
@@ -180,6 +192,11 @@ class ArenaIdApp:
                     "OCR samples did not reach a stable character majority."
                 )
 
+            if latest_roi is None:
+                raise RecognitionError("No Arena ID sample image was captured.")
+
+            self._last_sample_roi = latest_roi
+
             read_count = len(candidates)
             read_label = "read" if read_count == 1 else "reads"
 
@@ -196,6 +213,50 @@ class ArenaIdApp:
             self._show_error(f"Unexpected error: {exc}")
         finally:
             self._set_busy(False)
+
+    def _show_sample_preview(self, roi) -> None:
+        try:
+            encoded_ok, encoded = cv2.imencode(".png", roi)
+        except cv2.error as exc:
+            raise RecognitionError(
+                "Could not prepare the Arena ID crop preview."
+            ) from exc
+
+        if not encoded_ok:
+            raise RecognitionError("Could not prepare the Arena ID crop preview.")
+
+        encoded_data = base64.b64encode(encoded.tobytes()).decode("ascii")
+        source_image = tk.PhotoImage(
+            master=self.root,
+            data=encoded_data,
+            format="png",
+        )
+        self._sample_preview_image = source_image.zoom(
+            SAMPLE_PREVIEW_SCALE,
+            SAMPLE_PREVIEW_SCALE,
+        )
+        self.preview_label.configure(image=self._sample_preview_image)
+
+    def _save_sample(self) -> None:
+        arena_id = self.result_var.get().strip().upper()
+        if not arena_id or self._last_sample_roi is None:
+            self._show_error("Read an Arena ID before saving a sample.")
+            return
+
+        self.result_var.set(arena_id)
+
+        try:
+            sample_path = save_template_sample(
+                self._last_sample_roi,
+                arena_id,
+            )
+        except SampleCollectionError as exc:
+            self._show_error(str(exc))
+            return
+
+        self._last_sample_roi = None
+        self.save_sample_button.configure(state="disabled")
+        self.status_var.set(f"Saved Arena ID sample to {sample_path}")
 
     def _copy_result(self) -> None:
         arena_id = self.result_var.get()
@@ -224,6 +285,13 @@ class ArenaIdApp:
         state = "disabled" if busy else "normal"
         self.read_button.configure(state=state)
         self.copy_button.configure(state=state)
+        self.save_sample_button.configure(
+            state=(
+                "disabled"
+                if busy or self._last_sample_roi is None
+                else "normal"
+            )
+        )
 
     def _show_error(self, message: str) -> None:
         self.status_var.set(message)

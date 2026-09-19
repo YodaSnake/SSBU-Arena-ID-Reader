@@ -1,5 +1,6 @@
 .venv/
 .ep-work/
+template_samples/raw/
 .pytest_cache/
 __pycache__/
 *.pyc

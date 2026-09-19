@@ -4,6 +4,7 @@ import pytest
 from ssbu_arena_id_reader.recognition import (
     RecognitionError,
     character_majority,
+    extract_arena_id_roi,
     preprocess_frame,
     sanitize_candidate,
 )
@@ -34,7 +35,13 @@ def test_sanitize_candidate_keeps_only_ssbu_id_characters() -> None:
     assert sanitize_candidate("IOZ") == ""
 
 
+def test_extract_arena_id_roi_uses_reference_1080p_roi() -> None:
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    crop = extract_arena_id_roi(frame)
+    assert crop.shape == (30, 130, 3)
+
+
 def test_preprocess_frame_uses_reference_1080p_roi() -> None:
     frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
     processed = preprocess_frame(frame)
-    assert processed.shape == (120, 488)
+    assert processed.shape == (120, 520)

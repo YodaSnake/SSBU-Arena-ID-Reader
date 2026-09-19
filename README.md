@@ -12,6 +12,7 @@ The initial version is deliberately small:
 - A strict character-by-character majority vote produces the final ID.
 - The result is displayed and copied automatically.
 - **Copy** copies the displayed result again without running OCR.
+- **Save Sample** saves the latest successful unprocessed Arena ID crop as a lossless PNG for template-reference collection.
 
 ## Requirements
 
@@ -25,9 +26,11 @@ After the OCR model has been installed locally, normal use does not require Inte
 
 After a successful OBS connection, the WebSocket password, selected source, and Reads setting are stored locally in `~/.ssbu-arena-id-reader/config.json` so they do not need to be entered again on every launch. On macOS, the settings file is set to mode `0600`.
 
-`Reads` can be set from 1 to 5. The app first takes the selected number of samples. If they do not produce a strict character majority, it automatically takes additional samples one at a time, up to five total reads.
+The existing sample-count behavior remains supported internally from 1 to 5, including automatic rescue reads up to five total samples, but the current UI does not expose a Reads control.
 
 The OBS Source list refreshes automatically when its dropdown is opened, so there is no separate source-refresh step.
+
+After a successful read, the raw Arena ID crop is shown above the OCR result. The Arena ID field is editable, so OCR mistakes can be corrected before pressing **Save Sample**. Samples are stored in the repository-local `template_samples/raw/` directory using the current Arena ID field as the filename, such as `JPQHX.png`. If that name already exists, a numeric suffix such as `JPQHX_002.png` is used instead of overwriting the earlier sample. The raw collection directory is ignored by Git.
 
 ## Setup
 
@@ -45,6 +48,7 @@ In OBS, open **Tools > WebSocket Server Settings**, enable the server, and use t
 - The application has no analytics or telemetry.
 - The EasyOCR model is downloaded during first-time model setup and is not bundled in this repository.
 - The OBS WebSocket password, selected source, and Reads setting are stored locally in `~/.ssbu-arena-id-reader/config.json`.
+- Arena ID sample images are written locally to the repository's `template_samples/raw/` directory only when **Save Sample** is pressed.
 
 ## Current scope
 
