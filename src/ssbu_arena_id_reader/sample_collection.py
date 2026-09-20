@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import cv2
 import numpy as np
@@ -8,7 +9,23 @@ import numpy as np
 from .recognition import ALLOWED_CHARS, ARENA_ID_LENGTH
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-SAMPLE_DIRECTORY = REPOSITORY_ROOT / "template_samples" / "raw"
+
+
+def application_directory() -> Path:
+    if not getattr(sys, "frozen", False):
+        return REPOSITORY_ROOT
+
+    executable = Path(sys.executable).resolve()
+
+    if sys.platform == "darwin":
+        for parent in executable.parents:
+            if parent.suffix == ".app":
+                return parent.parent
+
+    return executable.parent
+
+
+SAMPLE_DIRECTORY = application_directory() / "template_samples" / "raw"
 
 
 class SampleCollectionError(RuntimeError):

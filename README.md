@@ -32,7 +32,7 @@ After a successful OBS connection, the WebSocket password, selected source, and 
 
 The OBS Source list refreshes automatically when its dropdown is opened, so there is no separate source-refresh step.
 
-After a capture is available, the surrounding Arena ID area is shown above the recognition result and the red outline marks the fixed-size recognition crop. The outline can be dragged horizontally within a small range; releasing it saves the new position and performs a fresh read from OBS. The Arena ID field is editable, so recognition mistakes can be corrected before pressing **Save Image**. If recognition cannot produce a valid Arena ID at all, the captured crop remains available and the Arena ID can be entered manually before saving. Images are stored in the repository-local `template_samples/raw/` directory using the current Arena ID field as the filename, such as `JPQHX.png`. If that name already exists, a numeric suffix such as `JPQHX_002.png` is used instead of overwriting the earlier image. The raw collection directory is ignored by Git.
+After a capture is available, the surrounding Arena ID area is shown above the recognition result and the red outline marks the fixed-size recognition crop. The outline can be dragged horizontally within a small range; releasing it saves the new position and performs a fresh read from OBS. The Arena ID field is editable, so recognition mistakes can be corrected before pressing **Save Image**. If recognition cannot produce a valid Arena ID at all, the captured crop remains available and the Arena ID can be entered manually before saving. During development from source, images are stored in the repository-local `template_samples/raw/` directory. In a packaged build, they are stored in `template_samples/raw/` beside the distributed executable or `.app`. The current Arena ID field is used as the filename, such as `JPQHX.png`. If that name already exists, a numeric suffix such as `JPQHX_002.png` is used instead of overwriting the earlier image. The development raw collection directory is ignored by Git.
 
 ## Setup
 
@@ -72,7 +72,7 @@ Archive SHA-256: `c6dc8ed96c02396c9f62abdb2354d64a153020ffcc74e564545ebc44333269
 
 At commit `4d08de2cb9f4a221e83c0178a8387f2de9897e30`, the production `TemplateRecognizer` path reads all 107 named corpus samples correctly. Because this corpus was used during development and tuning, that result is a regression check rather than an independent benchmark or a claim about arbitrary capture hardware.
 
-Additional raw crops can be collected with **Save Image** and are written to the ignored `template_samples/raw/` directory.
+Additional raw crops can be collected with **Save Image**. Source-development runs write them to the ignored repository-local `template_samples/raw/` directory; packaged builds create the same relative directory beside the distributed executable or `.app`.
 
 `tools/select_template.py` is the manual template-selection utility used during recognizer development. It displays a saved 5-character raw crop, lets a developer drag horizontally across one character, and writes the selected crop plus source-coordinate metadata to `template_samples/extracted/`. Reviewed templates used by the application live in `src/ssbu_arena_id_reader/assets/arena_id_templates/`.
 
@@ -83,7 +83,7 @@ Additional raw crops can be collected with **Save Image** and are written to the
 - The application has no analytics or telemetry.
 - The character templates used for Arena ID recognition are bundled with the application.
 - The OBS WebSocket password, selected source, and horizontal crop offset are stored locally in `~/.ssbu-arena-id-reader/config.json`.
-- Arena ID sample images are written locally to the repository's `template_samples/raw/` directory only when **Save Image** is pressed.
+- Arena ID sample images are written locally only when **Save Image** is pressed. Source-development runs use the repository's `template_samples/raw/` directory; packaged builds use `template_samples/raw/` beside the distributed executable or `.app`.
 
 ## Current scope
 
