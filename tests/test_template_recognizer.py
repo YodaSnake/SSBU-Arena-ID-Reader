@@ -89,6 +89,28 @@ def test_recognizer_reads_synthetic_reference_sequence() -> None:
         left = round(center - width / 2)
         roi[:, left : left + width] = template
     recognizer = TemplateRecognizer()
+    recognition = (
+        recognizer.recognize_with_candidates(
+            roi
+        )
+    )
+
+    assert recognition.text == arena_id
+    assert len(
+        recognition.character_candidates
+    ) == len(arena_id)
+
+    for index, candidates in enumerate(
+        recognition.character_candidates
+    ):
+        assert len(candidates) == len(
+            ALLOWED_CHARS
+        )
+        assert set(candidates) == set(
+            ALLOWED_CHARS
+        )
+        assert candidates[0] == arena_id[index]
+
     assert recognizer.recognize(roi) == arena_id
 
 

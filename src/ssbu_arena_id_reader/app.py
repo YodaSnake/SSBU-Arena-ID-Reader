@@ -9,6 +9,8 @@ import cv2
 
 from .obs_client import ObsClient, ObsError
 from .recognition import (
+    ALLOWED_CHARS,
+    ARENA_ID_LENGTH,
     RecognitionError,
     character_majority,
     decode_png,
@@ -26,11 +28,19 @@ class ArenaIdApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.recognizer = TemplateRecognizer()
+
         settings = load_settings()
+
         self.password_var = tk.StringVar(value=settings.obs_password)
         self.source_var = tk.StringVar(value=settings.obs_source)
         self.sample_count_var = tk.StringVar(value=str(settings.sample_count))
         self.result_var = tk.StringVar()
+        self.candidate_vars = [
+            tk.StringVar()
+            for _ in range(
+                ARENA_ID_LENGTH
+            )
+        ]
 
         if settings.obs_password and settings.obs_source:
             initial_status = "Ready."
@@ -40,12 +50,14 @@ class ArenaIdApp:
             initial_status = "Enter the OBS WebSocket password, then open OBS Source."
 
         self.status_var = tk.StringVar(value=initial_status)
+
         self._refreshing_sources = False
         self._last_sample_roi = None
         self._sample_preview_image = None
 
         self.root.title("SSBU Arena ID Reader")
         self.root.resizable(False, False)
+
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -55,6 +67,7 @@ class ArenaIdApp:
         ttk.Label(frame, text="OBS WebSocket Password").grid(
             row=0, column=0, sticky="w"
         )
+
         ttk.Entry(
             frame,
             textvariable=self.password_var,
@@ -63,6 +76,7 @@ class ArenaIdApp:
         ).grid(row=1, column=0, sticky="ew", pady=(4, 12))
 
         ttk.Label(frame, text="OBS Source").grid(row=2, column=0, sticky="w")
+
         self.source_box = ttk.Combobox(
             frame,
             textvariable=self.source_var,
@@ -83,6 +97,7 @@ class ArenaIdApp:
         self.preview_label.grid(row=5, column=0, pady=(0, 12))
 
         ttk.Label(frame, text="Arena ID").grid(row=6, column=0, sticky="w")
+
         result_row = ttk.Frame(frame)
         result_row.grid(row=7, column=0, sticky="ew", pady=(4, 12))
 
@@ -106,13 +121,66 @@ class ArenaIdApp:
             command=self._save_sample,
             state="disabled",
         )
-        self.save_sample_button.grid(row=0, column=2, padx=(8, 0))
+        self.save_sample_button.grid(
+            row=0,
+            column=2,
+            padx=(8, 0),
+        )
+
+        ttk.Label(
+            frame,
+            text="Character Candidates",
+        ).grid(
+            row=8,
+            column=0,
+            sticky="w",
+        )
+
+        candidate_row = ttk.Frame(frame)
+        candidate_row.grid(
+            row=9,
+            column=0,
+            sticky="w",
+            pady=(4, 12),
+        )
+
+        self.candidate_boxes = []
+
+        for index, variable in enumerate(
+            self.candidate_vars
+        ):
+            box = ttk.Combobox(
+                candidate_row,
+                textvariable=variable,
+                state="readonly",
+                width=3,
+                justify="center",
+            )
+            box.grid(
+                row=0,
+                column=index,
+                padx=(
+                    0 if index == 0 else 4,
+                    0,
+                ),
+            )
+            box.bind(
+                "<<ComboboxSelected>>",
+                self._candidate_selected,
+            )
+            self.candidate_boxes.append(
+                box
+            )
 
         ttk.Label(
             frame,
             textvariable=self.status_var,
             wraplength=320,
-        ).grid(row=8, column=0, sticky="w")
+        ).grid(
+            row=10,
+            column=0,
+            sticky="w",
+        )
 
     def _refresh_sources(self) -> None:
         if self._refreshing_sources:
@@ -127,14 +195,17 @@ class ArenaIdApp:
                 sources = client.list_inputs()
 
             self.source_box["values"] = sources
+
             if sources:
                 if self.source_var.get() not in sources:
                     self.source_var.set(sources[0])
+
                 self._save_settings()
                 self.status_var.set(f"Found {len(sources)} OBS input source(s).")
             else:
                 self.source_var.set("")
                 self.status_var.set("OBS returned no input sources.")
+
         except ObsError as exc:
             self.status_var.set(f"Could not refresh OBS sources: {exc}")
         finally:
@@ -142,16 +213,20 @@ class ArenaIdApp:
 
     def _read_id(self) -> None:
         source_name = self.source_var.get()
+
         if not source_name:
             self._show_error("Select an OBS source first.")
             return
 
         self._last_sample_roi = None
         self.result_var.set("")
+        self._clear_character_candidates()
         self._set_busy(True)
+
         try:
             self.status_var.set("Preparing Arena ID recognizer...")
             self.root.update_idletasks()
+
             self.recognizer.ensure_ready()
 
             initial_reads = int(self.sample_count_var.get())
@@ -162,15 +237,18 @@ class ArenaIdApp:
             with ObsClient(self.password_var.get()) as client:
                 for index in range(MAX_SAMPLE_COUNT):
                     read_number = index + 1
+
                     self.status_var.set(f"Reading sample {read_number}...")
                     self.root.update_idletasks()
 
                     screenshot = client.get_source_screenshot(source_name)
                     frame = decode_png(screenshot)
                     latest_roi = extract_arena_id_roi(frame)
+
                     self._last_sample_roi = latest_roi
                     self._show_sample_preview(latest_roi)
                     self.root.update_idletasks()
+
                     candidate = self.recognizer.recognize(
                         latest_roi
                     )
@@ -198,16 +276,31 @@ class ArenaIdApp:
 
             self._last_sample_roi = latest_roi
 
+            recognition = (
+                self.recognizer.recognize_with_candidates(
+                    latest_roi
+                )
+            )
+            latest_character_candidates = (
+                recognition.character_candidates
+            )
+
             read_count = len(candidates)
             read_label = "read" if read_count == 1 else "reads"
 
             self.result_var.set(arena_id)
+            self._set_character_candidates(
+                arena_id,
+                latest_character_candidates,
+            )
             self._copy_to_clipboard(arena_id)
             self._save_settings()
+
             self.status_var.set(
                 f"Copied {arena_id} to the clipboard "
                 f"({read_count} {read_label})."
             )
+
         except RecognitionError as exc:
             if self._last_sample_roi is not None:
                 self._show_error(
@@ -217,6 +310,7 @@ class ArenaIdApp:
                 )
             else:
                 self._show_error(str(exc))
+
         except ObsError as exc:
             self._show_error(str(exc))
         except Exception as exc:
@@ -236,11 +330,13 @@ class ArenaIdApp:
             raise RecognitionError("Could not prepare the Arena ID crop preview.")
 
         encoded_data = base64.b64encode(encoded.tobytes()).decode("ascii")
+
         source_image = tk.PhotoImage(
             master=self.root,
             data=encoded_data,
             format="png",
         )
+
         self._sample_preview_image = source_image.zoom(
             SAMPLE_PREVIEW_SCALE,
             SAMPLE_PREVIEW_SCALE,
@@ -249,6 +345,7 @@ class ArenaIdApp:
 
     def _save_sample(self) -> None:
         arena_id = self.result_var.get().strip().upper()
+
         if not arena_id or self._last_sample_roi is None:
             self._show_error("Read an Arena ID before saving a sample.")
             return
@@ -265,11 +362,98 @@ class ArenaIdApp:
             return
 
         self._last_sample_roi = None
-        self.save_sample_button.configure(state="disabled")
+        self.save_sample_button.configure(
+            state="disabled"
+        )
         self.status_var.set(f"Saved Arena ID sample to {sample_path}")
+
+    def _clear_character_candidates(self) -> None:
+        for variable, box in zip(
+            self.candidate_vars,
+            self.candidate_boxes,
+        ):
+            variable.set("")
+            box["values"] = ()
+
+    def _set_character_candidates(
+        self,
+        arena_id: str,
+        candidates: tuple[
+            tuple[str, ...],
+            ...,
+        ],
+    ) -> None:
+        for index, (
+            variable,
+            box,
+        ) in enumerate(
+            zip(
+                self.candidate_vars,
+                self.candidate_boxes,
+            )
+        ):
+            selected = (
+                arena_id[index]
+                if index < len(arena_id)
+                else ""
+            )
+
+            options = (
+                list(candidates[index])
+                if index < len(candidates)
+                else []
+            )
+
+            if (
+                selected
+                and selected not in options
+            ):
+                options.insert(
+                    0,
+                    selected,
+                )
+
+            box["values"] = tuple(
+                options
+            )
+            variable.set(selected)
+
+    def _candidate_selected(
+        self,
+        _event=None,
+    ) -> None:
+        characters = [
+            variable.get()
+            for variable in self.candidate_vars
+        ]
+
+        if (
+            len(characters) != ARENA_ID_LENGTH
+            or any(
+                len(character) != 1
+                or character not in ALLOWED_CHARS
+                for character in characters
+            )
+        ):
+            return
+
+        arena_id = "".join(
+            characters
+        )
+
+        self.result_var.set(
+            arena_id
+        )
+        self._copy_to_clipboard(
+            arena_id
+        )
+        self.status_var.set(
+            f"Copied {arena_id} to the clipboard."
+        )
 
     def _copy_result(self) -> None:
         arena_id = self.result_var.get()
+
         if not arena_id:
             self._show_error("There is no Arena ID to copy yet.")
             return
@@ -302,6 +486,17 @@ class ArenaIdApp:
                 else "normal"
             )
         )
+
+        candidate_state = (
+            "disabled"
+            if busy
+            else "readonly"
+        )
+
+        for box in self.candidate_boxes:
+            box.configure(
+                state=candidate_state
+            )
 
     def _show_error(self, message: str) -> None:
         self.status_var.set(message)

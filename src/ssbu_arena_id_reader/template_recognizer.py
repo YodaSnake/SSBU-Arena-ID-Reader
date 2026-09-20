@@ -35,6 +35,7 @@ SHAPE_BINARY_ALPHA_THRESHOLD = 128
 MIN_OBSERVED_COMPONENT_AREA = 20
 MIN_OBSERVED_COMPONENT_HEIGHT = 8
 CHAMFER_SCALE = 2.0
+CHARACTER_CANDIDATE_CENTER_RADIUS = 6
 TEMPLATE_FILENAMES = {
     character: (f"{character}.png",)
     for character in ALLOWED_CHARS
@@ -78,6 +79,12 @@ class ScoredState:
     chamfer_score: float
     shape_score: float
     final_score: float
+
+
+@dataclass(frozen=True)
+class TemplateRecognitionResult:
+    text: str
+    character_candidates: tuple[tuple[str, ...], ...]
 
 
 def normalize_roi(image: np.ndarray) -> np.ndarray:
@@ -842,6 +849,187 @@ def rank_states(
     return scored
 
 
+def sequence_score(
+    sequence: tuple[Candidate, ...],
+) -> float | None:
+    if not sequence:
+        return None
+
+    score = sequence[0].score
+
+    for previous, current in zip(
+        sequence,
+        sequence[1:],
+    ):
+        added_score = transition_score(
+            previous,
+            current,
+        )
+
+        if added_score is None:
+            return None
+
+        score += added_score
+
+    return score
+
+
+def rank_character_candidates(
+    target: np.ndarray,
+    selected_state: State,
+    observed: np.ndarray,
+    template_bank: dict[str, list[TemplateVariant]],
+    shape_masks: dict[str, np.ndarray],
+) -> tuple[tuple[str, ...], ...]:
+    variant_maps: dict[
+        str,
+        list[tuple[TemplateVariant, np.ndarray]],
+    ] = {}
+
+    for character in ALLOWED_CHARS:
+        variant_maps[character] = [
+            (
+                variant,
+                score_map(
+                    target,
+                    variant.image,
+                ),
+            )
+            for variant in template_bank[
+                character
+            ]
+        ]
+
+    ranked_positions: list[
+        tuple[str, ...]
+    ] = []
+
+    for index, selected_candidate in enumerate(
+        selected_state.sequence
+    ):
+        alternatives: list[State] = []
+
+        for character in ALLOWED_CHARS:
+            maps = variant_maps[
+                character
+            ]
+            seen_centers: set[float] = set()
+
+            for offset in range(
+                -CHARACTER_CANDIDATE_CENTER_RADIUS,
+                CHARACTER_CANDIDATE_CENTER_RADIUS + 1,
+            ):
+                anchor_center = (
+                    selected_candidate.center
+                    + offset
+                )
+
+                matched_scores: list[float] = []
+                matched_centers: list[float] = []
+
+                for variant, scores in maps:
+                    (
+                        score,
+                        matched_center,
+                    ) = aligned_match(
+                        scores,
+                        variant.width,
+                        anchor_center,
+                    )
+                    matched_scores.append(
+                        score
+                    )
+                    matched_centers.append(
+                        matched_center
+                    )
+
+                center = float(
+                    np.median(
+                        matched_centers
+                    )
+                )
+
+                if center in seen_centers:
+                    continue
+
+                seen_centers.add(
+                    center
+                )
+
+                replacement = Candidate(
+                    character=character,
+                    center=center,
+                    score=float(
+                        np.median(
+                            matched_scores
+                        )
+                    ),
+                )
+
+                sequence = list(
+                    selected_state.sequence
+                )
+                sequence[index] = replacement
+                candidate_sequence = tuple(
+                    sequence
+                )
+
+                score = sequence_score(
+                    candidate_sequence
+                )
+
+                if score is None:
+                    continue
+
+                alternatives.append(
+                    State(
+                        score=score,
+                        sequence=candidate_sequence,
+                    )
+                )
+
+        scored = rank_states(
+            alternatives,
+            observed,
+            shape_masks,
+        )
+
+        ordered: list[str] = []
+
+        for item in scored:
+            character = (
+                item.state.sequence[
+                    index
+                ].character
+            )
+
+            if character in ordered:
+                continue
+
+            ordered.append(
+                character
+            )
+
+            if len(ordered) == len(
+                ALLOWED_CHARS
+            ):
+                break
+
+        for character in ALLOWED_CHARS:
+            if character not in ordered:
+                ordered.append(
+                    character
+                )
+
+        ranked_positions.append(
+            tuple(ordered)
+        )
+
+    return tuple(
+        ranked_positions
+    )
+
+
 class TemplateRecognizer:
     def __init__(self, template_dir: Path | None = None) -> None:
         self.template_dir = template_dir or TEMPLATE_DIRECTORY
@@ -901,13 +1089,24 @@ class TemplateRecognizer:
         self._template_bank = bank
         self._shape_masks = shape_masks
 
-    def recognize(self, image: np.ndarray) -> str:
+    def _recognize_state(
+        self,
+        image: np.ndarray,
+    ) -> tuple[
+        np.ndarray,
+        State | None,
+        np.ndarray | None,
+    ]:
         self.ensure_ready()
+
         if (
             self._template_bank is None
             or self._shape_masks is None
         ):
-            raise RecognitionError("Arena ID templates are not available.")
+            raise RecognitionError(
+                "Arena ID templates are not available."
+            )
+
         target = normalize_roi(image)
         candidates = generate_candidates(
             target,
@@ -916,18 +1115,23 @@ class TemplateRecognizer:
         states = top_sequence_states(
             candidates
         )
+
+        observed: np.ndarray | None = None
+
         if states:
             observed = (
                 build_observed_shape_mask(
                     image
                 )
             )
+
             if np.any(observed):
                 ranked = rank_states(
                     states,
                     observed,
                     self._shape_masks,
                 )
+
                 if ranked:
                     state = ranked[0].state
                 else:
@@ -942,9 +1146,102 @@ class TemplateRecognizer:
             state = reconstruct(
                 candidates
             )
+
+        return (
+            target,
+            state,
+            observed,
+        )
+
+    def recognize_with_candidates(
+        self,
+        image: np.ndarray,
+    ) -> TemplateRecognitionResult:
+        (
+            target,
+            state,
+            observed,
+        ) = self._recognize_state(
+            image
+        )
+
+        empty_candidates = tuple(
+            ()
+            for _ in range(
+                ARENA_ID_LENGTH
+            )
+        )
+
+        if state is None:
+            return TemplateRecognitionResult(
+                text="",
+                character_candidates=(
+                    empty_candidates
+                ),
+            )
+
+        result = state_text(
+            state
+        )
+
+        if len(result) != ARENA_ID_LENGTH:
+            return TemplateRecognitionResult(
+                text="",
+                character_candidates=(
+                    empty_candidates
+                ),
+            )
+
+        if (
+            observed is None
+            or not np.any(observed)
+        ):
+            return TemplateRecognitionResult(
+                text=result,
+                character_candidates=tuple(
+                    (character,)
+                    for character in result
+                ),
+            )
+
+        if (
+            self._template_bank is None
+            or self._shape_masks is None
+        ):
+            raise RecognitionError(
+                "Arena ID templates are not available."
+            )
+
+        character_candidates = (
+            rank_character_candidates(
+                target,
+                state,
+                observed,
+                self._template_bank,
+                self._shape_masks,
+            )
+        )
+
+        return TemplateRecognitionResult(
+            text=result,
+            character_candidates=(
+                character_candidates
+            ),
+        )
+
+    def recognize(self, image: np.ndarray) -> str:
+        _, state, _ = self._recognize_state(
+            image
+        )
+
         if state is None:
             return ""
-        result = state_text(state)
+
+        result = state_text(
+            state
+        )
+
         if len(result) != ARENA_ID_LENGTH:
             return ""
+
         return result

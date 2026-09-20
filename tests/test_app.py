@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import ssbu_arena_id_reader.app as app_module
+
 from ssbu_arena_id_reader.app import ArenaIdApp
 
 
@@ -37,15 +38,35 @@ class FakeObsClient:
         return b"fake"
 
 
+class FakeRecognition:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.character_candidates = tuple(
+            (character,)
+            for character in text
+        )
+
+
 class FakeRecognizer:
     def __init__(self) -> None:
         self.results = iter(["JPQHX", "JPQHY", "JPQHX"])
+        self.last_result = ""
+        self.detailed_calls = 0
 
     def ensure_ready(self) -> None:
         pass
 
     def recognize(self, image) -> str:
-        return next(self.results)
+        self.last_result = next(
+            self.results
+        )
+        return self.last_result
+
+    def recognize_with_candidates(self, image):
+        self.detailed_calls += 1
+        return FakeRecognition(
+            self.last_result
+        )
 
 
 class AlwaysInvalidRecognizer:
@@ -79,17 +100,40 @@ def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -
 
     copied = []
     previews = []
+    cleared = []
+    candidate_updates = []
+
     app._copy_to_clipboard = copied.append
     app._save_settings = lambda: None
     app._set_busy = lambda busy: None
     app._show_sample_preview = previews.append
+    app._clear_character_candidates = lambda: cleared.append(True)
+    app._set_character_candidates = (
+        lambda arena_id, candidates: candidate_updates.append(
+            (
+                arena_id,
+                candidates,
+            )
+        )
+    )
 
     app._read_id()
 
     assert FakeObsClient.calls == 3
+    assert app.recognizer.detailed_calls == 1
     assert app.result_var.get() == "JPQHX"
     assert copied == ["JPQHX"]
     assert previews == ["raw-roi", "raw-roi", "raw-roi"]
+    assert cleared == [True]
+    assert candidate_updates == [
+        (
+            "JPQHX",
+            tuple(
+                (character,)
+                for character in "JPQHX"
+            ),
+        )
+    ]
     assert app._last_sample_roi == "raw-roi"
     assert app.status_var.get() == "Copied JPQHX to the clipboard (3 reads)."
 
@@ -121,10 +165,13 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
     previews = []
     copied = []
     errors = []
+    cleared = []
+
     app._show_sample_preview = previews.append
     app._copy_to_clipboard = copied.append
     app._save_settings = lambda: None
     app._set_busy = lambda busy: None
+    app._clear_character_candidates = lambda: cleared.append(True)
     app._show_error = errors.append
 
     app._read_id()
@@ -134,6 +181,7 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
     assert app._last_sample_roi == "raw-roi"
     assert previews == ["raw-roi"] * 5
     assert copied == []
+    assert cleared == [True]
     assert len(errors) == 1
     assert "Enter the Arena ID manually and press Save Sample." in errors[0]
 
@@ -168,6 +216,7 @@ def test_refresh_sources_updates_dropdown_and_preserves_valid_selection(
     monkeypatch,
 ) -> None:
     FakeRefreshObsClient.calls = 0
+
     monkeypatch.setattr(app_module, "ObsClient", FakeRefreshObsClient)
 
     app = ArenaIdApp.__new__(ArenaIdApp)
@@ -189,6 +238,7 @@ def test_refresh_sources_updates_dropdown_and_preserves_valid_selection(
 
 def test_refresh_sources_ignores_reentrant_call(monkeypatch) -> None:
     FakeRefreshObsClient.calls = 0
+
     monkeypatch.setattr(app_module, "ObsClient", FakeRefreshObsClient)
 
     app = ArenaIdApp.__new__(ArenaIdApp)
@@ -236,3 +286,64 @@ def test_save_sample_uses_current_recognition_result_and_consumes_latest_roi(
     assert app._last_sample_roi is None
     assert app.save_sample_button.state == "disabled"
     assert app.status_var.get() == f"Saved Arena ID sample to {expected_path}"
+
+
+def test_character_candidates_keep_similarity_order_and_selected_result() -> None:
+    app = ArenaIdApp.__new__(ArenaIdApp)
+
+    app.candidate_vars = [
+        FakeVar()
+        for _ in range(5)
+    ]
+    app.candidate_boxes = [
+        FakeSourceBox()
+        for _ in range(5)
+    ]
+
+    candidates = (
+        ("1", "L", "J"),
+        ("Y", "V"),
+        ("B", "8"),
+        ("H", "N"),
+        ("2", "3"),
+    )
+
+    app._set_character_candidates(
+        "LYBH2",
+        candidates,
+    )
+
+    assert [
+        variable.get()
+        for variable in app.candidate_vars
+    ] == list("LYBH2")
+
+    assert app.candidate_boxes[0].values == (
+        "1",
+        "L",
+        "J",
+    )
+    assert app.candidate_boxes[1].values == (
+        "Y",
+        "V",
+    )
+
+
+def test_candidate_selection_updates_result_and_clipboard() -> None:
+    app = ArenaIdApp.__new__(ArenaIdApp)
+
+    app.candidate_vars = [
+        FakeVar(character)
+        for character in "LYBH2"
+    ]
+    app.result_var = FakeVar()
+    app.status_var = FakeVar()
+
+    copied = []
+    app._copy_to_clipboard = copied.append
+
+    app._candidate_selected()
+
+    assert app.result_var.get() == "LYBH2"
+    assert copied == ["LYBH2"]
+    assert app.status_var.get() == "Copied LYBH2 to the clipboard."
