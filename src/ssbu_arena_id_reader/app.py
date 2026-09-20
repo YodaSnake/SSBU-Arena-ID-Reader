@@ -28,7 +28,8 @@ from .settings import (
     save_settings,
 )
 
-SAMPLE_INTERVAL_SECONDS = 0.15
+SAMPLE_INTERVAL_SECONDS = 0.10
+USE_ADAPTIVE_MULTI_READ = False
 STABLE_READ_COUNT = 3
 MAX_READ_COUNT = 5
 MAX_DISPLAYED_CHARACTER_CANDIDATES = 10
@@ -355,6 +356,22 @@ class ArenaIdApp:
                             frame,
                         )
                     )
+
+                    if not USE_ADAPTIVE_MULTI_READ:
+                        if (
+                            len(candidate) == ARENA_ID_LENGTH
+                            and all(
+                                character in ALLOWED_CHARS
+                                for character in candidate
+                            )
+                        ):
+                            arena_id = candidate
+                            break
+
+                        raise RecognitionError(
+                            "Single-read recognition did not produce "
+                            "a valid Arena ID."
+                        )
 
                     if read_number == STABLE_READ_COUNT:
                         stable_candidate = candidates[0]

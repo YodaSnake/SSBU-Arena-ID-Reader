@@ -14,6 +14,7 @@ from ssbu_arena_id_reader.template_recognizer import (
     Candidate,
     State,
     TemplateRecognizer,
+    build_observed_shape_mask,
     normalize_roi,
     rank_states,
     render_sequence_mask,
@@ -67,6 +68,73 @@ def test_normalize_roi_rejects_empty_image() -> None:
         normalize_roi(
             np.empty((0, 0, 3), dtype=np.uint8)
         )
+
+
+def test_observed_shape_mask_uses_local_lightness_contrast() -> None:
+    width, height = TEMPLATE_ROI_SIZE
+    background = np.linspace(
+        210,
+        70,
+        width,
+        dtype=np.uint8,
+    )
+    image = np.repeat(
+        background[
+            np.newaxis,
+            :,
+            np.newaxis,
+        ],
+        height,
+        axis=0,
+    )
+    image = np.repeat(
+        image,
+        3,
+        axis=2,
+    )
+
+    centers = (
+        20,
+        39,
+        58,
+        77,
+        96,
+    )
+
+    for index, center in enumerate(
+        centers
+    ):
+        contrast = (
+            25
+            if index < 3
+            else 120
+        )
+        value = min(
+            int(background[center])
+            + contrast,
+            245,
+        )
+        image[
+            7:23,
+            center - 2 : center + 2,
+        ] = value
+
+    mask = build_observed_shape_mask(
+        image
+    )
+
+    for center in centers:
+        assert np.all(
+            mask[
+                7:23,
+                center - 2 : center + 2,
+            ]
+            == 255
+        )
+
+    assert not np.any(
+        mask[:, :10]
+    )
 
 
 def test_recognizer_reads_synthetic_reference_sequence() -> None:

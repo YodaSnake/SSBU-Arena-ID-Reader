@@ -93,6 +93,11 @@ class AlwaysInvalidRecognizer:
 def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     FakeObsClient.calls = 0
 
+    monkeypatch.setattr(
+        app_module,
+        "USE_ADAPTIVE_MULTI_READ",
+        True,
+    )
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
 
     frames = iter(
@@ -187,6 +192,11 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
 def test_read_id_stops_after_three_identical_reads(monkeypatch) -> None:
     FakeObsClient.calls = 0
 
+    monkeypatch.setattr(
+        app_module,
+        "USE_ADAPTIVE_MULTI_READ",
+        True,
+    )
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
     monkeypatch.setattr(
         app_module,
@@ -247,6 +257,11 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
 ) -> None:
     FakeObsClient.calls = 0
 
+    monkeypatch.setattr(
+        app_module,
+        "USE_ADAPTIVE_MULTI_READ",
+        True,
+    )
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
     monkeypatch.setattr(
         app_module,
@@ -293,6 +308,127 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
     assert cleared == [True]
     assert len(errors) == 1
     assert "Enter the Arena ID manually and press Save Image." in errors[0]
+
+
+def test_read_id_uses_one_read_when_adaptive_multi_read_disabled(
+    monkeypatch,
+) -> None:
+    FakeObsClient.calls = 0
+
+    monkeypatch.setattr(
+        app_module,
+        "USE_ADAPTIVE_MULTI_READ",
+        False,
+    )
+    monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
+    monkeypatch.setattr(
+        app_module,
+        "decode_png",
+        lambda data: "full-frame",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "extract_arena_id_roi",
+        lambda frame, **kwargs: "raw-roi",
+    )
+    monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
+
+    app = ArenaIdApp.__new__(ArenaIdApp)
+    app.root = FakeRoot()
+    app.recognizer = FakeRecognizer()
+    app.password_var = FakeVar("fake-password")
+    app.source_var = FakeVar("キャプボ")
+    app.result_var = FakeVar()
+    app.status_var = FakeVar()
+    app.crop_offset_x = 0
+
+    copied = []
+    previews = []
+    candidate_updates = []
+
+    app._copy_to_clipboard = copied.append
+    app._save_settings = lambda: None
+    app._set_busy = lambda busy: None
+    app._show_crop_adjustment_preview = previews.append
+    app._clear_character_candidates = lambda: None
+    app._set_character_candidates = (
+        lambda arena_id, candidates: candidate_updates.append(
+            (
+                arena_id,
+                candidates,
+            )
+        )
+    )
+
+    app._read_id()
+
+    assert FakeObsClient.calls == 1
+    assert app.recognizer.detailed_calls == 1
+    assert app.result_var.get() == "JPQHX"
+    assert copied == ["JPQHX"]
+    assert previews == ["full-frame"]
+    assert candidate_updates == [
+        (
+            "JPQHX",
+            tuple(
+                (character,)
+                for character in "JPQHX"
+            ),
+        )
+    ]
+    assert app._last_sample_frame == "full-frame"
+    assert app._last_sample_roi == "raw-roi"
+    assert app.status_var.get() == "Copied JPQHX to the clipboard (1 read)."
+
+
+def test_single_read_rejects_invalid_candidate(monkeypatch) -> None:
+    FakeObsClient.calls = 0
+
+    monkeypatch.setattr(
+        app_module,
+        "USE_ADAPTIVE_MULTI_READ",
+        False,
+    )
+    monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
+    monkeypatch.setattr(
+        app_module,
+        "decode_png",
+        lambda data: "full-frame",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "extract_arena_id_roi",
+        lambda frame, **kwargs: "raw-roi",
+    )
+
+    app = ArenaIdApp.__new__(ArenaIdApp)
+    app.root = FakeRoot()
+    app.recognizer = AlwaysInvalidRecognizer()
+    app.password_var = FakeVar("fake-password")
+    app.source_var = FakeVar("キャプボ")
+    app.result_var = FakeVar()
+    app.status_var = FakeVar()
+    app.crop_offset_x = 0
+
+    previews = []
+    errors = []
+
+    app._copy_to_clipboard = lambda value: None
+    app._save_settings = lambda: None
+    app._set_busy = lambda busy: None
+    app._show_crop_adjustment_preview = previews.append
+    app._clear_character_candidates = lambda: None
+    app._show_error = errors.append
+
+    app._read_id()
+
+    assert FakeObsClient.calls == 1
+    assert app.result_var.get() == ""
+    assert app._last_sample_frame == "full-frame"
+    assert app._last_sample_roi == "raw-roi"
+    assert previews == ["full-frame"]
+    assert len(errors) == 1
+    assert "Single-read recognition did not produce a valid Arena ID." in errors[0]
 
 
 class FakeSourceBox:

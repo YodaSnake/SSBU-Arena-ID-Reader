@@ -32,6 +32,9 @@ SHAPE_LOW_LIGHTNESS_FLOOR = 120
 SHAPE_BORDER_MARGIN = 12
 SHAPE_GROW_RADIUS = 2.25
 SHAPE_BINARY_ALPHA_THRESHOLD = 128
+OBSERVED_BACKGROUND_SIGMA = 3.0
+OBSERVED_SHAPE_CORE_CONTRAST = 12
+OBSERVED_SHAPE_GROW_CONTRAST = 6
 MIN_OBSERVED_COMPONENT_AREA = 20
 MIN_OBSERVED_COMPONENT_HEIGHT = 8
 CHAMFER_SCALE = 2.0
@@ -536,6 +539,55 @@ def select_observed_shape_core(
     ).astype(np.uint8)
 
 
+def observed_local_contrast(
+    lightness: np.ndarray,
+) -> np.ndarray:
+    background = cv2.GaussianBlur(
+        lightness,
+        (0, 0),
+        sigmaX=OBSERVED_BACKGROUND_SIGMA,
+        sigmaY=OBSERVED_BACKGROUND_SIGMA,
+    )
+    return cv2.subtract(
+        lightness,
+        background,
+    )
+
+
+def grow_observed_shape_mask(
+    local_contrast: np.ndarray,
+    selected_core: np.ndarray,
+) -> np.ndarray:
+    if not np.any(selected_core):
+        return np.zeros_like(
+            selected_core,
+            dtype=np.uint8,
+        )
+    outside_core = np.where(
+        selected_core == 0,
+        1,
+        0,
+    ).astype(np.uint8)
+    distance = cv2.distanceTransform(
+        outside_core,
+        cv2.DIST_L2,
+        cv2.DIST_MASK_PRECISE,
+    )
+    support = (
+        (distance <= SHAPE_GROW_RADIUS)
+        & (
+            local_contrast
+            >= OBSERVED_SHAPE_GROW_CONTRAST
+        )
+    )
+    return np.where(
+        (selected_core > 0)
+        | support,
+        255,
+        0,
+    ).astype(np.uint8)
+
+
 def grow_shape_mask(
     lightness: np.ndarray,
     selected_core: np.ndarray,
@@ -633,16 +685,20 @@ def build_observed_shape_mask(
         cv2.COLOR_BGR2LAB,
     )
     lightness = lab[:, :, 0]
+    local_contrast = observed_local_contrast(
+        lightness
+    )
     core = np.where(
-        lightness >= SHAPE_CORE_LIGHTNESS,
+        local_contrast
+        >= OBSERVED_SHAPE_CORE_CONTRAST,
         255,
         0,
     ).astype(np.uint8)
     selected_core = select_observed_shape_core(
         core
     )
-    return grow_shape_mask(
-        lightness,
+    return grow_observed_shape_mask(
+        local_contrast,
         selected_core,
     )
 
