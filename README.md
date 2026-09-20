@@ -43,6 +43,39 @@ uv run ssbu-arena-id-reader
 
 In OBS, open **Tools > WebSocket Server Settings**, enable the server, and use the default port `4455`. Enter the WebSocket password in SSBU Arena ID Reader, then open the **OBS Source** dropdown. The source list refreshes automatically. Select the capture-card input source itself rather than a composed scene.
 
+## Recognition algorithm
+
+The recognizer is specialized for the fixed 5-character SSBU Arena ID display rather than using a general-purpose OCR model. Given the same saved crop, recognition is deterministic and does not require a learned model or network service.
+
+The pipeline is roughly:
+
+1. Crop the Arena ID area from the OBS source and normalize it to `130x30`.
+2. Match templates for the observed 30-character Arena ID alphabet with normalized cross-correlation (NCC), retaining multiple character candidates and positions.
+3. Build plausible 5-character sequences using character-spacing constraints. The first-to-second-character transition is modeled separately because the development corpus showed that it can be narrower than later transitions. The current first-transition minimum/target are `9.5`/`17.0` pixels; later transitions use `12.0`/`19.0`.
+4. Build an observed foreground-shape mask from local lightness contrast relative to a Gaussian-smoothed background. This reduces sensitivity to broad brightness changes and bright animated UI effects behind the text.
+5. Render candidate sequence shapes and rerank them using Dice overlap and Chamfer-distance similarity together with the NCC sequence score.
+6. Compare the top two final sequence scores. A valid result with a score margin of at least `0.015` is accepted immediately; a smaller or unavailable margin falls back to adaptive multi-read confirmation.
+
+Adaptive multi-read accepts three identical valid reads early. Otherwise it continues to five reads and uses a strict character-by-character majority vote.
+
+These constants are empirical parameters for the current SSBU display and development capture corpus. The score margin is not a calibrated probability or a general OCR confidence percentage.
+
+## Development corpus and template tooling
+
+The raw development/regression corpus is distributed separately in the Raw Corpus v1 GitHub release rather than being stored in Git history:
+
+https://github.com/YodaSnake/SSBU-Arena-ID-Reader/releases/tag/raw-corpus-v1
+
+Raw Corpus v1 contains 107 lossless `130x30` PNG Arena ID crops. Each filename records the expected 5-character Arena ID, with suffixes such as `_002` distinguishing repeated captures of the same ID. The archive also contains a SHA-256 manifest.
+
+Archive SHA-256: `c6dc8ed96c02396c9f62abdb2354d64a153020ffcc74e564545ebc44333269e0`
+
+At commit `4d08de2cb9f4a221e83c0178a8387f2de9897e30`, the production `TemplateRecognizer` path reads all 107 named corpus samples correctly. Because this corpus was used during development and tuning, that result is a regression check rather than an independent benchmark or a claim about arbitrary capture hardware.
+
+Additional raw crops can be collected with **Save Image** and are written to the ignored `template_samples/raw/` directory.
+
+`tools/select_template.py` is the manual template-selection utility used during recognizer development. It displays a saved 5-character raw crop, lets a developer drag horizontally across one character, and writes the selected crop plus source-coordinate metadata to `template_samples/extracted/`. Reviewed templates used by the application live in `src/ssbu_arena_id_reader/assets/arena_id_templates/`.
+
 ## Privacy and local data
 
 - Arena ID recognition runs locally on the computer.
