@@ -39,12 +39,17 @@ class FakeObsClient:
 
 
 class FakeRecognition:
-    def __init__(self, text: str) -> None:
+    def __init__(
+        self,
+        text: str,
+        confidence_margin: float | None = 0.020,
+    ) -> None:
         self.text = text
         self.character_candidates = tuple(
             (character,)
             for character in text
         )
+        self.confidence_margin = confidence_margin
 
 
 class FakeRecognizer:
@@ -60,6 +65,7 @@ class FakeRecognizer:
         )
         self.results_by_image = {}
         self.detailed_calls = 0
+        self.confidence_margin = 0.020
 
     def ensure_ready(self) -> None:
         pass
@@ -75,10 +81,22 @@ class FakeRecognizer:
 
     def recognize_with_candidates(self, image):
         self.detailed_calls += 1
-        return FakeRecognition(
-            self.results_by_image[
+
+        if image in self.results_by_image:
+            result = self.results_by_image[
                 image
             ]
+        else:
+            result = next(
+                self.results
+            )
+            self.results_by_image[
+                image
+            ] = result
+
+        return FakeRecognition(
+            result,
+            self.confidence_margin,
         )
 
 
@@ -88,6 +106,12 @@ class AlwaysInvalidRecognizer:
 
     def recognize(self, image) -> str:
         return "BAD"
+
+    def recognize_with_candidates(self, image):
+        return FakeRecognition(
+            "BAD",
+            None,
+        )
 
 
 def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
@@ -381,7 +405,9 @@ def test_read_id_uses_one_read_when_adaptive_multi_read_disabled(
     assert app.status_var.get() == "Copied JPQHX to the clipboard (1 read)."
 
 
-def test_single_read_rejects_invalid_candidate(monkeypatch) -> None:
+def test_low_confidence_first_read_falls_back_to_adaptive(
+    monkeypatch,
+) -> None:
     FakeObsClient.calls = 0
 
     monkeypatch.setattr(
@@ -400,6 +426,71 @@ def test_single_read_rejects_invalid_candidate(monkeypatch) -> None:
         "extract_arena_id_roi",
         lambda frame, **kwargs: "raw-roi",
     )
+    monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
+
+    app = ArenaIdApp.__new__(ArenaIdApp)
+    app.root = FakeRoot()
+    app.recognizer = FakeRecognizer()
+    app.recognizer.results = iter(
+        [
+            "JPQHX",
+            "JPQHX",
+            "JPQHX",
+        ]
+    )
+    app.recognizer.confidence_margin = 0.010
+    app.password_var = FakeVar("fake-password")
+    app.source_var = FakeVar("キャプボ")
+    app.result_var = FakeVar()
+    app.status_var = FakeVar()
+    app.crop_offset_x = 0
+
+    copied = []
+    previews = []
+
+    app._copy_to_clipboard = copied.append
+    app._save_settings = lambda: None
+    app._set_busy = lambda busy: None
+    app._show_crop_adjustment_preview = previews.append
+    app._clear_character_candidates = lambda: None
+    app._set_character_candidates = lambda arena_id, candidates: None
+
+    app._read_id()
+
+    assert FakeObsClient.calls == 3
+    assert app.recognizer.detailed_calls == 2
+    assert app.result_var.get() == "JPQHX"
+    assert copied == ["JPQHX"]
+    assert previews == [
+        "full-frame",
+        "full-frame",
+        "full-frame",
+    ]
+    assert app.status_var.get() == "Copied JPQHX to the clipboard (3 reads)."
+
+
+def test_invalid_first_read_falls_back_before_reporting_failure(
+    monkeypatch,
+) -> None:
+    FakeObsClient.calls = 0
+
+    monkeypatch.setattr(
+        app_module,
+        "USE_ADAPTIVE_MULTI_READ",
+        False,
+    )
+    monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
+    monkeypatch.setattr(
+        app_module,
+        "decode_png",
+        lambda data: "full-frame",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "extract_arena_id_roi",
+        lambda frame, **kwargs: "raw-roi",
+    )
+    monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
 
     app = ArenaIdApp.__new__(ArenaIdApp)
     app.root = FakeRoot()
@@ -422,13 +513,13 @@ def test_single_read_rejects_invalid_candidate(monkeypatch) -> None:
 
     app._read_id()
 
-    assert FakeObsClient.calls == 1
+    assert FakeObsClient.calls == 5
     assert app.result_var.get() == ""
     assert app._last_sample_frame == "full-frame"
     assert app._last_sample_roi == "raw-roi"
-    assert previews == ["full-frame"]
+    assert previews == ["full-frame"] * 5
     assert len(errors) == 1
-    assert "Single-read recognition did not produce a valid Arena ID." in errors[0]
+    assert "Enter the Arena ID manually and press Save Image." in errors[0]
 
 
 class FakeSourceBox:

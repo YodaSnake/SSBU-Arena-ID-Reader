@@ -88,6 +88,7 @@ class ScoredState:
 class TemplateRecognitionResult:
     text: str
     character_candidates: tuple[tuple[str, ...], ...]
+    confidence_margin: float | None = None
 
 
 def normalize_roi(image: np.ndarray) -> np.ndarray:
@@ -1152,6 +1153,7 @@ class TemplateRecognizer:
         np.ndarray,
         State | None,
         np.ndarray | None,
+        float | None,
     ]:
         self.ensure_ready()
 
@@ -1173,6 +1175,7 @@ class TemplateRecognizer:
         )
 
         observed: np.ndarray | None = None
+        confidence_margin: float | None = None
 
         if states:
             observed = (
@@ -1190,6 +1193,13 @@ class TemplateRecognizer:
 
                 if ranked:
                     state = ranked[0].state
+
+                    if len(ranked) >= 2:
+                        confidence_margin = max(
+                            ranked[0].final_score
+                            - ranked[1].final_score,
+                            0.0,
+                        )
                 else:
                     state = reconstruct(
                         candidates
@@ -1207,6 +1217,7 @@ class TemplateRecognizer:
             target,
             state,
             observed,
+            confidence_margin,
         )
 
     def recognize_with_candidates(
@@ -1217,6 +1228,7 @@ class TemplateRecognizer:
             target,
             state,
             observed,
+            confidence_margin,
         ) = self._recognize_state(
             image
         )
@@ -1234,6 +1246,7 @@ class TemplateRecognizer:
                 character_candidates=(
                     empty_candidates
                 ),
+                confidence_margin=confidence_margin,
             )
 
         result = state_text(
@@ -1246,6 +1259,7 @@ class TemplateRecognizer:
                 character_candidates=(
                     empty_candidates
                 ),
+                confidence_margin=confidence_margin,
             )
 
         if (
@@ -1258,6 +1272,7 @@ class TemplateRecognizer:
                     (character,)
                     for character in result
                 ),
+                confidence_margin=confidence_margin,
             )
 
         if (
@@ -1283,10 +1298,11 @@ class TemplateRecognizer:
             character_candidates=(
                 character_candidates
             ),
+            confidence_margin=confidence_margin,
         )
 
     def recognize(self, image: np.ndarray) -> str:
-        _, state, _ = self._recognize_state(
+        _, state, _, _ = self._recognize_state(
             image
         )
 

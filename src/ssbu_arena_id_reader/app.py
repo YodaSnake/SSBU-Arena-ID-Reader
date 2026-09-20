@@ -30,6 +30,7 @@ from .settings import (
 
 SAMPLE_INTERVAL_SECONDS = 0.10
 USE_ADAPTIVE_MULTI_READ = False
+CONFIDENCE_MARGIN_THRESHOLD = 0.015
 STABLE_READ_COUNT = 3
 MAX_READ_COUNT = 5
 MAX_DISPLAYED_CHARACTER_CANDIDATES = 10
@@ -323,6 +324,7 @@ class ArenaIdApp:
             samples = []
             arena_id: str | None = None
             latest_roi = None
+            first_recognition = None
 
             with ObsClient(self.password_var.get()) as client:
                 for index in range(MAX_READ_COUNT):
@@ -345,9 +347,26 @@ class ArenaIdApp:
                     )
                     self.root.update_idletasks()
 
-                    candidate = self.recognizer.recognize(
-                        latest_roi
-                    )
+                    if (
+                        not USE_ADAPTIVE_MULTI_READ
+                        and read_number == 1
+                    ):
+                        first_recognition = (
+                            self.recognizer
+                            .recognize_with_candidates(
+                                latest_roi
+                            )
+                        )
+                        candidate = (
+                            first_recognition.text
+                        )
+                    else:
+                        candidate = (
+                            self.recognizer.recognize(
+                                latest_roi
+                            )
+                        )
+
                     candidates.append(candidate)
                     samples.append(
                         (
@@ -357,21 +376,34 @@ class ArenaIdApp:
                         )
                     )
 
-                    if not USE_ADAPTIVE_MULTI_READ:
-                        if (
-                            len(candidate) == ARENA_ID_LENGTH
+                    if (
+                        not USE_ADAPTIVE_MULTI_READ
+                        and read_number == 1
+                    ):
+                        valid_candidate = (
+                            len(candidate)
+                            == ARENA_ID_LENGTH
                             and all(
-                                character in ALLOWED_CHARS
-                                for character in candidate
+                                character
+                                in ALLOWED_CHARS
+                                for character
+                                in candidate
                             )
+                        )
+                        confidence_margin = (
+                            first_recognition
+                            .confidence_margin
+                        )
+
+                        if (
+                            valid_candidate
+                            and confidence_margin
+                            is not None
+                            and confidence_margin
+                            >= CONFIDENCE_MARGIN_THRESHOLD
                         ):
                             arena_id = candidate
                             break
-
-                        raise RecognitionError(
-                            "Single-read recognition did not produce "
-                            "a valid Arena ID."
-                        )
 
                     if read_number == STABLE_READ_COUNT:
                         stable_candidate = candidates[0]
@@ -429,11 +461,18 @@ class ArenaIdApp:
                 )
                 self.root.update_idletasks()
 
-            recognition = (
-                self.recognizer.recognize_with_candidates(
-                    representative_roi
+            if (
+                representative_index == 0
+                and first_recognition is not None
+            ):
+                recognition = first_recognition
+            else:
+                recognition = (
+                    self.recognizer
+                    .recognize_with_candidates(
+                        representative_roi
+                    )
                 )
-            )
             latest_character_candidates = (
                 recognition.character_candidates
             )

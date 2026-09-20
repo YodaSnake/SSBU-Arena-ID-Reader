@@ -1,6 +1,8 @@
 .venv/
 .ep-work/
 template_samples/raw/
+template_samples/extracted/*.png
+template_samples/extracted/*.source.txt
 .pytest_cache/
 __pycache__/
 *.pyc

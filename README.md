@@ -5,7 +5,7 @@ SSBU Arena ID Reader reads the 5-character Battle Arena ID from a Super Smash Br
 The application is deliberately small:
 
 - OBS Studio is the only video input path.
-- Pressing **Read ID** captures one source screenshot by default and accepts a valid 5-character Arena ID immediately.
+- Pressing **Read ID** captures one source screenshot first. A clearly separated valid recognition is accepted immediately; an ambiguous or invalid first result automatically falls back to the adaptive multi-read path.
 - The Arena ID region is cropped and normalized with OpenCV.
 - A bundled SSBU-specific character template matcher recognizes the crop.
 - Shape reranking uses local brightness contrast against a Gaussian-smoothed estimate of the background, which reduces sensitivity to broad brightness changes and bright UI effects behind the text.
@@ -13,7 +13,7 @@ The application is deliberately small:
 - The result is displayed and copied automatically.
 - **Copy ID** copies the displayed result again without running recognition.
 - **Save Image** saves the retained unprocessed Arena ID crop as a lossless PNG for template-reference collection.
-- The earlier adaptive 3-to-5-read majority-vote path is retained as a source-level development option and is disabled by default.
+- The adaptive 3-to-5-read majority-vote path is used automatically for ambiguous or invalid first reads, and a source-level development switch can force that path for every read.
 
 ## Requirements
 
@@ -56,7 +56,9 @@ In OBS, open **Tools > WebSocket Server Settings**, enable the server, and use t
 
 The Arena ID crop is based on the SSBU 1920x1080 capture layout and scales proportionally for other 16:9 source resolutions. Recognition is not calibrated separately for each capture card. Moderate brightness and capture-appearance differences are expected to be tolerated, but strong sharpening, denoising, rescaling, color processing, compression, or OBS filters that materially alter the glyph shapes can reduce accuracy.
 
-Adaptive multi-read remains available in the source as the development switch `USE_ADAPTIVE_MULTI_READ` and is disabled by default. When enabled, three identical valid reads are accepted early; otherwise recognition continues to five reads and uses a strict character-by-character majority vote.
+By default, the first valid recognition is accepted immediately when the final ranking-score margin between the top two sequence candidates is at least `0.015`. A smaller margin, a missing margin, or an invalid first result falls back to adaptive multi-read. This margin is a ranking-score separation, not a probability or calibrated confidence percentage.
+
+The source-level development switch `USE_ADAPTIVE_MULTI_READ` can force adaptive multi-read for every recognition. In adaptive mode, three identical valid reads are accepted early; otherwise recognition continues to five reads and uses a strict character-by-character majority vote.
 
 Direct capture-device access, continuous monitoring, and result history are intentionally deferred. The current crop remains fixed in size and supports only the small horizontal adjustment exposed by the preview.
 

@@ -164,6 +164,8 @@ def test_recognizer_reads_synthetic_reference_sequence() -> None:
     )
 
     assert recognition.text == arena_id
+    assert recognition.confidence_margin is not None
+    assert recognition.confidence_margin >= 0.0
     assert len(
         recognition.character_candidates
     ) == len(arena_id)
