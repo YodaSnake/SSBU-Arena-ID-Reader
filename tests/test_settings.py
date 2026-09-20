@@ -1,4 +1,5 @@
 import stat
+import sys
 
 from ssbu_arena_id_reader.settings import (
     AppSettings,
@@ -19,7 +20,9 @@ def test_settings_round_trip(tmp_path) -> None:
     save_settings(settings, path)
 
     assert load_settings(path) == settings
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    if sys.platform != "win32":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_missing_settings_return_defaults(tmp_path) -> None:
