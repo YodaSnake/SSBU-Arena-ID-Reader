@@ -28,7 +28,7 @@ Arena ID recognition is restricted to the observed 30-character code alphabet `0
 
 Arena ID recognition runs locally and does not require Internet access. OBS communication stays on `127.0.0.1:4455`.
 
-After a successful OBS connection, the WebSocket password, selected source, and horizontal crop offset are stored locally in `~/.ssbu-arena-id-reader/config.json` so they do not need to be entered again on every launch. On macOS, the settings file is set to mode `0600`.
+After a successful OBS connection, the WebSocket password, selected source, and horizontal crop offset are stored in the operating system's per-user application-data location so they do not need to be entered again on every launch. On macOS this is `~/Library/Application Support/SSBU Arena ID Reader/config.json`; on Windows it is `%APPDATA%\SSBU Arena ID Reader\config.json`. Existing macOS development settings from `~/.ssbu-arena-id-reader/config.json` are migrated automatically when the new settings file does not yet exist, without deleting the legacy file. On macOS, the settings file is set to mode `0600`.
 
 The OBS Source list refreshes automatically when its dropdown is opened, so there is no separate source-refresh step.
 
@@ -42,6 +42,26 @@ uv run ssbu-arena-id-reader
 ```
 
 In OBS, open **Tools > WebSocket Server Settings**, enable the server, and use the default port `4455`. Enter the WebSocket password in SSBU Arena ID Reader, then open the **OBS Source** dropdown. The source list refreshes automatically. Select the capture-card input source itself rather than a composed scene.
+
+## Build a macOS app
+
+The repository includes a PyInstaller specification for building a native macOS `.app` bundle for the architecture of the Mac performing the build.
+
+```bash
+uv sync --python 3.11
+uv run pyinstaller \
+  --noconfirm \
+  --clean \
+  --distpath dist \
+  --workpath .ep-work/pyinstaller-macos \
+  installer/ssbu_arena_id_reader_macos.spec
+```
+
+The resulting application is `dist/SSBU Arena ID Reader.app`. The character templates required by the recognizer are bundled inside the application, so the packaged app does not require a separate Python installation.
+
+The current macOS packaged build has been built and exercised on Apple silicon, including OBS Arena ID recognition and **Save Image**. It is architecture-specific and is not currently distributed with an Apple Developer ID signature or notarization.
+
+When **Save Image** is used from the packaged application, `template_samples/raw/` is created beside `SSBU Arena ID Reader.app`. Keep the application in a location where files can be created beside it if sample collection is needed.
 
 ## Recognition algorithm
 

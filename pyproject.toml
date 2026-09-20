@@ -23,5 +23,6 @@ packages = ["src/ssbu_arena_id_reader"]
 
 [dependency-groups]
 dev = [
+    "pyinstaller>=6.22,<7",
     "pytest>=8.3,<9",
 ]
