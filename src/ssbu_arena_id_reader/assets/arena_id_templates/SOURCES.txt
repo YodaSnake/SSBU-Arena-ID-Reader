@@ -1,9 +1,11 @@
 Bundled SSBU Arena ID character templates.
 
 The base template bank contains one template for each observed valid Arena ID
-character. Characters 5 and 6 have two additional variants because development
-evaluation showed a recurring 5/6 ambiguity that was resolved by median
-aggregation across three templates.
+character. Character 3 has one additional variant because development evaluation
+showed a recurring 3/8 ambiguity in a distinct capture appearance. Characters 5
+and 6 have two additional variants because development evaluation showed a
+recurring 5/6 ambiguity that was resolved by median aggregation across three
+templates.
 
 Format:
 character variant source-image left right
@@ -12,6 +14,7 @@ character variant source-image left right
 1 base 3V1RV.png 48 59
 2 base 5F2LG.png 46 63
 3 base JS3J4.png 52 69
+3 alt1 G33DD_002.png 42 58
 4 base 8W4P2.png 46 64
 5 base NN544.png 47 64
 6 base M6LY2.png 36 52

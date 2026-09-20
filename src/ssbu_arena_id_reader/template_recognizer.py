@@ -45,6 +45,10 @@ TEMPLATE_FILENAMES = {
     character: (f"{character}.png",)
     for character in ALLOWED_CHARS
 }
+TEMPLATE_FILENAMES["3"] = (
+    "3.png",
+    "3_alt1.png",
+)
 TEMPLATE_FILENAMES["5"] = (
     "5.png",
     "5_alt1.png",

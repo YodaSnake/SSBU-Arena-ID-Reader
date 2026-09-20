@@ -31,7 +31,12 @@ def test_bundled_template_bank_has_expected_variants() -> None:
     assert set(recognizer._template_bank) == set(ALLOWED_CHARS)
     assert set(recognizer._shape_masks) == set(ALLOWED_CHARS)
     for character, variants in recognizer._template_bank.items():
-        expected = 3 if character in {"5", "6"} else 1
+        if character == "3":
+            expected = 2
+        elif character in {"5", "6"}:
+            expected = 3
+        else:
+            expected = 1
         assert len(variants) == expected
 
 
@@ -42,6 +47,7 @@ def test_bundled_template_assets_exist() -> None:
     }
     expected.update(
         {
+            "3_alt1.png",
             "5_alt1.png",
             "5_alt2.png",
             "6_alt1.png",
