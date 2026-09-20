@@ -1,5 +1,7 @@
 # SSBU Arena ID Reader
 
+<img src="docs/images/README001.png" alt="SSBU Arena ID Reader" width="960">
+
 SSBU Arena ID Reader reads the 5-character Battle Arena ID from a Super Smash Bros. Ultimate capture source in OBS Studio and copies the recognized ID to the clipboard.
 
 The application is deliberately small:
