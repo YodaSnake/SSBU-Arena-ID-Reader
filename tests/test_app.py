@@ -132,11 +132,9 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     app.recognizer = FakeRecognizer()
     app.password_var = FakeVar("fake-password")
     app.source_var = FakeVar("キャプボ")
-    app.sample_count_var = FakeVar("3")
     app.result_var = FakeVar()
     app.status_var = FakeVar()
     app.crop_offset_x = 0
-    app.crop_offset_y = 0
 
     copied = []
     previews = []
@@ -214,11 +212,9 @@ def test_read_id_stops_after_three_identical_reads(monkeypatch) -> None:
     )
     app.password_var = FakeVar("fake-password")
     app.source_var = FakeVar("キャプボ")
-    app.sample_count_var = FakeVar("3")
     app.result_var = FakeVar()
     app.status_var = FakeVar()
     app.crop_offset_x = 0
-    app.crop_offset_y = 0
 
     copied = []
     previews = []
@@ -269,9 +265,7 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
     app.recognizer = AlwaysInvalidRecognizer()
     app.password_var = FakeVar("fake-password")
     app.source_var = FakeVar("キャプボ")
-    app.sample_count_var = FakeVar("1")
     app.crop_offset_x = 0
-    app.crop_offset_y = 0
     app.result_var = FakeVar("OLD12")
     app.status_var = FakeVar()
     app._last_sample_roi = "old-roi"
@@ -570,100 +564,6 @@ def test_horizontal_crop_drag_clamps_and_runs_adaptive_read_on_release() -> None
     assert adaptive_reads == [-12]
     assert app._crop_drag_anchor_x is None
     assert app._crop_drag_origin_x is None
-
-
-def test_manual_crop_adjustment_re_recognizes_retained_frame(
-    monkeypatch,
-) -> None:
-    extracted = []
-
-    def fake_extract(
-        frame,
-        *,
-        crop_offset_x,
-    ):
-        extracted.append(
-            (
-                frame,
-                crop_offset_x,
-            )
-        )
-        return "adjusted-roi"
-
-    class AdjustedRecognizer:
-        def recognize_with_candidates(
-            self,
-            image,
-        ):
-            assert image == "adjusted-roi"
-            return FakeRecognition(
-                "2MMHW"
-            )
-
-    monkeypatch.setattr(
-        app_module,
-        "extract_arena_id_roi",
-        fake_extract,
-    )
-
-    app = ArenaIdApp.__new__(
-        ArenaIdApp
-    )
-    app.root = FakeRoot()
-    app.recognizer = AdjustedRecognizer()
-    app.crop_offset_x = -12
-    app._last_sample_frame = "full-frame"
-    app._last_sample_roi = "old-roi"
-    app.result_var = FakeVar()
-    app.status_var = FakeVar()
-    app.save_sample_button = FakeButton()
-
-    copied = []
-    candidate_updates = []
-    settings_saves = []
-
-    app._copy_to_clipboard = copied.append
-    app._clear_character_candidates = lambda: None
-    app._set_character_candidates = (
-        lambda arena_id, candidates: candidate_updates.append(
-            (
-                arena_id,
-                candidates,
-            )
-        )
-    )
-    app._save_settings = (
-        lambda: settings_saves.append(
-            True
-        )
-    )
-
-    app._recognize_last_frame_with_current_crop()
-
-    assert extracted == [
-        (
-            "full-frame",
-            -12,
-        )
-    ]
-    assert app._last_sample_roi == "adjusted-roi"
-    assert app.result_var.get() == "2MMHW"
-    assert copied == ["2MMHW"]
-    assert candidate_updates == [
-        (
-            "2MMHW",
-            tuple(
-                (character,)
-                for character in "2MMHW"
-            ),
-        )
-    ]
-    assert app.save_sample_button.state == "normal"
-    assert settings_saves == [True]
-    assert (
-        app.status_var.get()
-        == "Crop adjusted. Copied 2MMHW to the clipboard."
-    )
 
 
 def test_reset_crop_restores_default_without_captured_frame() -> None:

@@ -6,10 +6,6 @@ from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".ssbu-arena-id-reader" / "config.json"
 
-MIN_SAMPLE_COUNT = 1
-MAX_SAMPLE_COUNT = 5
-DEFAULT_SAMPLE_COUNT = 1
-
 MIN_CROP_OFFSET_X = -20
 MAX_CROP_OFFSET_X = 0
 DEFAULT_CROP_OFFSET_X = 0
@@ -19,7 +15,6 @@ DEFAULT_CROP_OFFSET_X = 0
 class AppSettings:
     obs_password: str = ""
     obs_source: str = ""
-    sample_count: int = DEFAULT_SAMPLE_COUNT
     crop_offset_x: int = DEFAULT_CROP_OFFSET_X
 
 
@@ -34,14 +29,7 @@ def load_settings(path: Path = CONFIG_PATH) -> AppSettings:
 
     password = data.get("obs_password")
     source = data.get("obs_source")
-    sample_count = data.get("sample_count")
     crop_offset_x = data.get("crop_offset_x")
-
-    if (
-        type(sample_count) is not int
-        or not MIN_SAMPLE_COUNT <= sample_count <= MAX_SAMPLE_COUNT
-    ):
-        sample_count = DEFAULT_SAMPLE_COUNT
 
     if (
         type(crop_offset_x) is not int
@@ -54,7 +42,6 @@ def load_settings(path: Path = CONFIG_PATH) -> AppSettings:
     return AppSettings(
         obs_password=password if isinstance(password, str) else "",
         obs_source=source if isinstance(source, str) else "",
-        sample_count=sample_count,
         crop_offset_x=crop_offset_x,
     )
 
@@ -65,7 +52,6 @@ def save_settings(settings: AppSettings, path: Path = CONFIG_PATH) -> None:
     payload = {
         "obs_password": settings.obs_password,
         "obs_source": settings.obs_source,
-        "sample_count": settings.sample_count,
         "crop_offset_x": settings.crop_offset_x,
     }
 

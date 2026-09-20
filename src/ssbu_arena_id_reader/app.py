@@ -22,7 +22,6 @@ from .sample_collection import SampleCollectionError, save_template_sample
 from .template_recognizer import TemplateRecognizer
 from .settings import (
     MAX_CROP_OFFSET_X,
-    MAX_SAMPLE_COUNT,
     MIN_CROP_OFFSET_X,
     AppSettings,
     load_settings,
@@ -31,6 +30,7 @@ from .settings import (
 
 SAMPLE_INTERVAL_SECONDS = 0.15
 STABLE_READ_COUNT = 3
+MAX_READ_COUNT = 5
 MAX_DISPLAYED_CHARACTER_CANDIDATES = 10
 
 CROP_CONTEXT_1080P = (
@@ -61,7 +61,6 @@ class ArenaIdApp:
 
         self.password_var = tk.StringVar(value=settings.obs_password)
         self.source_var = tk.StringVar(value=settings.obs_source)
-        self.sample_count_var = tk.StringVar(value=str(STABLE_READ_COUNT))
         self.crop_offset_x = settings.crop_offset_x
         self.result_var = tk.StringVar()
         self.candidate_vars = [
@@ -79,10 +78,6 @@ class ArenaIdApp:
             initial_status = "Enter the OBS WebSocket password, then open OBS Source."
 
         self.status_var = tk.StringVar(value=initial_status)
-
-        self.crop_position_var = tk.StringVar(
-            value=f"Crop: X {self.crop_offset_x:+d}"
-        )
 
         self._refreshing_sources = False
         self._last_sample_roi = None
@@ -329,7 +324,7 @@ class ArenaIdApp:
             latest_roi = None
 
             with ObsClient(self.password_var.get()) as client:
-                for index in range(MAX_SAMPLE_COUNT):
+                for index in range(MAX_READ_COUNT):
                     read_number = index + 1
 
                     self.status_var.set(f"Reading sample {read_number}...")
@@ -374,7 +369,7 @@ class ArenaIdApp:
                             arena_id = stable_candidate
                             break
 
-                    if read_number == MAX_SAMPLE_COUNT:
+                    if read_number == MAX_READ_COUNT:
                         arena_id = character_majority(
                             candidates
                         )
@@ -550,10 +545,6 @@ class ArenaIdApp:
                 self._crop_box_item,
                 *self._crop_box_canvas_coords(),
             )
-
-        self.crop_position_var.set(
-            f"Crop: X {self.crop_offset_x:+d}"
-        )
 
     def _crop_context_image(
         self,
@@ -743,71 +734,6 @@ class ArenaIdApp:
             self._save_settings()
             self._read_id()
 
-    def _recognize_last_frame_with_current_crop(
-        self,
-    ) -> None:
-        if self._last_sample_frame is None:
-            return
-
-        try:
-            self.status_var.set(
-                "Re-reading adjusted crop..."
-            )
-            self.root.update_idletasks()
-
-            roi = extract_arena_id_roi(
-                self._last_sample_frame,
-                crop_offset_x=self.crop_offset_x,
-            )
-
-            self._last_sample_roi = roi
-            self._save_settings()
-            self.save_sample_button.configure(
-                state="normal"
-            )
-
-            recognition = (
-                self.recognizer.recognize_with_candidates(
-                    roi
-                )
-            )
-            arena_id = recognition.text
-
-            if (
-                len(arena_id) != ARENA_ID_LENGTH
-                or any(
-                    character not in ALLOWED_CHARS
-                    for character in arena_id
-                )
-            ):
-                self.result_var.set("")
-                self._clear_character_candidates()
-                self.status_var.set(
-                    "Crop adjusted, but no valid Arena ID "
-                    "was recognized."
-                )
-                return
-
-            self.result_var.set(
-                arena_id
-            )
-            self._set_character_candidates(
-                arena_id,
-                recognition.character_candidates,
-            )
-            self._copy_to_clipboard(
-                arena_id
-            )
-            self.status_var.set(
-                f"Crop adjusted. Copied {arena_id} "
-                "to the clipboard."
-            )
-
-        except RecognitionError as exc:
-            self.status_var.set(
-                f"Crop adjustment failed: {exc}"
-            )
-
     def _reset_crop(self) -> None:
         self.crop_offset_x = 0
         self._update_crop_box()
@@ -957,7 +883,6 @@ class ArenaIdApp:
             AppSettings(
                 obs_password=self.password_var.get(),
                 obs_source=self.source_var.get(),
-                sample_count=int(self.sample_count_var.get()),
                 crop_offset_x=self.crop_offset_x,
             )
         )
