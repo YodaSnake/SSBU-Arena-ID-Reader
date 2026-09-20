@@ -18,6 +18,7 @@ from ssbu_arena_id_reader.template_recognizer import (
     normalize_roi,
     rank_states,
     render_sequence_mask,
+    sequence_score,
     state_text,
 )
 
@@ -240,6 +241,142 @@ def test_shape_reranking_prefers_complete_glyph_shape() -> None:
     assert len(ranked) == 2
     assert state_text(ranked[0].state) == "LYBH2"
     assert ranked[0].shape_score > ranked[1].shape_score
+
+
+def test_first_transition_allows_observed_short_spacing_only_at_left_edge() -> None:
+    first_short = (
+        Candidate(
+            character="F",
+            center=28.0,
+            score=0.0,
+        ),
+        Candidate(
+            character="1",
+            center=37.5,
+            score=0.0,
+        ),
+        Candidate(
+            character="J",
+            center=55.5,
+            score=0.0,
+        ),
+        Candidate(
+            character="H",
+            center=72.0,
+            score=0.0,
+        ),
+        Candidate(
+            character="Y",
+            center=89.5,
+            score=0.0,
+        ),
+    )
+
+    later_short = (
+        Candidate(
+            character="F",
+            center=28.0,
+            score=0.0,
+        ),
+        Candidate(
+            character="L",
+            center=44.5,
+            score=0.0,
+        ),
+        Candidate(
+            character="J",
+            center=55.5,
+            score=0.0,
+        ),
+        Candidate(
+            character="H",
+            center=72.0,
+            score=0.0,
+        ),
+        Candidate(
+            character="Y",
+            center=89.5,
+            score=0.0,
+        ),
+    )
+
+    too_short_first = (
+        Candidate(
+            character="F",
+            center=28.0,
+            score=0.0,
+        ),
+        Candidate(
+            character="1",
+            center=37.0,
+            score=0.0,
+        ),
+        Candidate(
+            character="J",
+            center=55.5,
+            score=0.0,
+        ),
+        Candidate(
+            character="H",
+            center=72.0,
+            score=0.0,
+        ),
+        Candidate(
+            character="Y",
+            center=89.5,
+            score=0.0,
+        ),
+    )
+
+    assert sequence_score(first_short) is not None
+    assert sequence_score(later_short) is None
+    assert sequence_score(too_short_first) is None
+
+
+def test_first_transition_uses_observed_17_pixel_target() -> None:
+    ideal = tuple(
+        Candidate(
+            character=character,
+            center=center,
+            score=0.0,
+        )
+        for character, center in zip(
+            "F1JHY",
+            (
+                10.0,
+                27.0,
+                46.0,
+                65.0,
+                84.0,
+            ),
+        )
+    )
+
+    wider_first = tuple(
+        Candidate(
+            character=character,
+            center=center,
+            score=0.0,
+        )
+        for character, center in zip(
+            "F1JHY",
+            (
+                10.0,
+                29.0,
+                48.0,
+                67.0,
+                86.0,
+            ),
+        )
+    )
+
+    assert sequence_score(
+        ideal
+    ) == pytest.approx(0.0)
+
+    assert sequence_score(
+        wider_first
+    ) == pytest.approx(-0.03)
 
 
 def test_missing_template_asset_is_reported(tmp_path: Path) -> None:

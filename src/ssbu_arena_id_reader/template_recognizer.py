@@ -20,8 +20,10 @@ CANDIDATES_PER_CHARACTER = 8
 PEAK_DEDUP_DISTANCE = 2
 CENTER_DEDUP_DISTANCE = 2.0
 ALIGNMENT_RADIUS = 2
+FIRST_MIN_CENTER_DISTANCE = 9.5
 MIN_CENTER_DISTANCE = 12.0
 MAX_CENTER_DISTANCE = 24.0
+FIRST_TARGET_CENTER_DISTANCE = 17.0
 TARGET_CENTER_DISTANCE = 19.0
 CENTER_DISTANCE_PENALTY = 0.015
 RERANK_BEAM_WIDTH = 128
@@ -290,15 +292,25 @@ def generate_candidates(
 def transition_score(
     previous: Candidate,
     current: Candidate,
+    transition_index: int,
 ) -> float | None:
     distance = current.center - previous.center
+
+    if transition_index == 1:
+        minimum_distance = FIRST_MIN_CENTER_DISTANCE
+        target_distance = FIRST_TARGET_CENTER_DISTANCE
+    else:
+        minimum_distance = MIN_CENTER_DISTANCE
+        target_distance = TARGET_CENTER_DISTANCE
+
     if (
-        distance < MIN_CENTER_DISTANCE
+        distance < minimum_distance
         or distance > MAX_CENTER_DISTANCE
     ):
         return None
+
     penalty = CENTER_DISTANCE_PENALTY * abs(
-        distance - TARGET_CENTER_DISTANCE
+        distance - target_distance
     )
     return current.score - penalty
 
@@ -315,7 +327,7 @@ def reconstruct(candidates: list[Candidate]) -> State | None:
         for index, candidate in enumerate(candidates)
     }
     layers.append(first_layer)
-    for _ in range(1, ARENA_ID_LENGTH):
+    for transition_index in range(1, ARENA_ID_LENGTH):
         previous_layer = layers[-1]
         current_layer: dict[int, State] = {}
         for current_index, current in enumerate(candidates):
@@ -324,7 +336,11 @@ def reconstruct(candidates: list[Candidate]) -> State | None:
                 previous = candidates[previous_index]
                 if current.center <= previous.center:
                     continue
-                added_score = transition_score(previous, current)
+                added_score = transition_score(
+                    previous,
+                    current,
+                    transition_index,
+                )
                 if added_score is None:
                     continue
                 candidate_state = State(
@@ -367,7 +383,7 @@ def top_sequence_states(
         )
         for candidate in candidates
     ]
-    for _ in range(1, ARENA_ID_LENGTH):
+    for transition_index in range(1, ARENA_ID_LENGTH):
         expanded: list[State] = []
         for state in states:
             previous = state.sequence[-1]
@@ -380,6 +396,7 @@ def top_sequence_states(
                 added_score = transition_score(
                     previous,
                     current,
+                    transition_index,
                 )
                 if added_score is None:
                     continue
@@ -914,13 +931,20 @@ def sequence_score(
 
     score = sequence[0].score
 
-    for previous, current in zip(
-        sequence,
-        sequence[1:],
+    for transition_index, (
+        previous,
+        current,
+    ) in enumerate(
+        zip(
+            sequence,
+            sequence[1:],
+        ),
+        start=1,
     ):
         added_score = transition_score(
             previous,
             current,
+            transition_index,
         )
 
         if added_score is None:
