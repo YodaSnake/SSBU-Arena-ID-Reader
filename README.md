@@ -128,15 +128,17 @@ These constants are empirical parameters for the current SSBU display and develo
 
 ## Development corpus and template tooling
 
-The raw development/regression corpus is distributed separately in the Raw Corpus v1 GitHub release rather than being stored in Git history:
+The current raw development/regression corpus is distributed separately in the Raw Corpus v2 GitHub release rather than being stored in Git history:
 
-https://github.com/YodaSnake/SSBU-Arena-ID-Reader/releases/tag/raw-corpus-v1
+https://github.com/YodaSnake/SSBU-Arena-ID-Reader/releases/tag/raw-corpus-v2
 
-Raw Corpus v1 contains 107 lossless `130x30` PNG Arena ID crops. Each filename records the expected 5-character Arena ID, with suffixes such as `_002` distinguishing repeated captures of the same ID. The archive also contains a SHA-256 manifest.
+Raw Corpus v2 contains 109 lossless `130x30` PNG Arena ID crops. It preserves all 107 Raw Corpus v1 PNG files unchanged and adds `G33DD.png` and `G33DD_002.png`. Each filename records the expected 5-character Arena ID, with suffixes such as `_002` distinguishing repeated captures of the same ID. The archive also contains a SHA-256 manifest.
 
-Archive SHA-256: `c6dc8ed96c02396c9f62abdb2354d64a153020ffcc74e564545ebc44333269e0`
+Archive SHA-256: `4820945845553d51d44b5c3fb0ccf76178133b298db0e3f2c3bc7ecf7065155b`
 
-At commit `4d08de2cb9f4a221e83c0178a8387f2de9897e30`, the production `TemplateRecognizer` path reads all 107 named corpus samples correctly. Because this corpus was used during development and tuning, that result is a regression check rather than an independent benchmark or a claim about arbitrary capture hardware.
+At commit `3da0d0ce27505a2840dd3a6980e02d07add66a48`, the production `TemplateRecognizer` path reads all 109 named corpus samples correctly. Because this corpus was used during development and tuning, that result is a regression check rather than an independent benchmark or a claim about arbitrary capture hardware.
+
+Raw Corpus v1 remains available as the previous fixed corpus version.
 
 Additional raw crops can be collected with **Save Image**. Source-development runs write them to the ignored repository-local `template_samples/raw/` directory; packaged builds create the same relative directory beside the distributed executable or `.app`.
 
