@@ -1,0 +1,93 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: "latest-known"
+
+      - name: Sync locked environment
+        run: uv sync --frozen --python 3.11
+
+      - name: Run tests
+        run: uv run python -m pytest -q
+
+      - name: Build Windows application
+        run: >
+          uv run pyinstaller
+          --noconfirm
+          --clean
+          --distpath dist
+          --workpath .ep-work/pyinstaller-windows
+          installer/ssbu_arena_id_reader_windows.spec
+
+      - name: Verify Windows bundle
+        shell: pwsh
+        run: |
+          $bundle = Join-Path $PWD "dist\SSBU Arena ID Reader"
+          $exe = Join-Path $bundle "SSBU Arena ID Reader.exe"
+
+          if (-not (Test-Path $exe -PathType Leaf)) {
+            throw "Windows executable was not created."
+          }
+
+          $templates = @(
+            Get-ChildItem -Path $bundle -Recurse -File -Filter "*.png" |
+              Where-Object {
+                $_.FullName -match "ssbu_arena_id_reader[\\/]assets[\\/]arena_id_templates"
+              }
+          )
+
+          Write-Host "TEMPLATE_PNG_COUNT=$($templates.Count)"
+
+          if ($templates.Count -ne 35) {
+            throw "Expected 35 bundled template PNG files."
+          }
+
+      - name: Create distribution ZIP
+        shell: pwsh
+        run: |
+          $bundle = Join-Path $PWD "dist\SSBU Arena ID Reader"
+          $zip = Join-Path $PWD "SSBU-Arena-ID-Reader-Windows-x64.zip"
+
+          if (Test-Path $zip) {
+            Remove-Item $zip -Force
+          }
+
+          Compress-Archive `
+            -Path $bundle `
+            -DestinationPath $zip `
+            -CompressionLevel Optimal
+
+          if (-not (Test-Path $zip -PathType Leaf)) {
+            throw "Windows distribution ZIP was not created."
+          }
+
+          if ((Get-Item $zip).Length -eq 0) {
+            throw "Windows distribution ZIP is empty."
+          }
+
+      - name: Upload Windows ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          path: SSBU-Arena-ID-Reader-Windows-x64.zip
+          archive: false

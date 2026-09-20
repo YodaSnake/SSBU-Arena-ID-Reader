@@ -63,6 +63,22 @@ The current macOS packaged build has been built and exercised on Apple silicon, 
 
 When **Save Image** is used from the packaged application, `template_samples/raw/` is created beside `SSBU Arena ID Reader.app`. Keep the application in a location where files can be created beside it if sample collection is needed.
 
+## Build a Windows app
+
+The repository includes a GitHub Actions workflow for producing a Windows x64 one-folder PyInstaller build. Run **Build Windows** manually from the repository's Actions tab.
+
+The workflow uses Python 3.11, installs the locked project environment, runs the test suite on `windows-latest`, builds `SSBU Arena ID Reader.exe`, verifies that all 35 recognition template PNG files are present, and packages the complete application folder as:
+
+```text
+SSBU-Arena-ID-Reader-Windows-x64.zip
+```
+
+Extract the ZIP before running the application. The executable depends on the files bundled alongside it in the extracted `SSBU Arena ID Reader` folder; it is not a standalone one-file executable.
+
+When **Save Image** is used from the packaged Windows application, `template_samples/raw/` is created beside `SSBU Arena ID Reader.exe`.
+
+The Windows packaging path can be validated by GitHub Actions without a local Windows development machine. Real Windows desktop operation with OBS should still be treated as unvalidated until it is exercised on Windows hardware.
+
 ## Recognition algorithm
 
 The recognizer is specialized for the fixed 5-character SSBU Arena ID display rather than using a general-purpose OCR model. Given the same saved crop, recognition is deterministic and does not require a learned model or network service.
@@ -102,7 +118,7 @@ Additional raw crops can be collected with **Save Image**. Source-development ru
 - OBS communication is limited to `127.0.0.1:4455`.
 - The application has no analytics or telemetry.
 - The character templates used for Arena ID recognition are bundled with the application.
-- The OBS WebSocket password, selected source, and horizontal crop offset are stored locally in `~/.ssbu-arena-id-reader/config.json`.
+- The OBS WebSocket password, selected source, and horizontal crop offset are stored in the operating system's per-user application-data location: `~/Library/Application Support/SSBU Arena ID Reader/config.json` on macOS or `%APPDATA%\SSBU Arena ID Reader\config.json` on Windows.
 - Arena ID sample images are written locally only when **Save Image** is pressed. Source-development runs use the repository's `template_samples/raw/` directory; packaged builds use `template_samples/raw/` beside the distributed executable or `.app`.
 
 ## Current scope
