@@ -18,30 +18,60 @@ The application is deliberately small:
 ## Requirements
 
 - OBS Studio 28 or newer with obs-websocket enabled.
-- Python 3.11 or 3.12.
+- Packaged builds do not require Python or `uv`.
+- Running the application from source requires Python 3.11 or 3.12.
 
-The current version has been developed and tested on macOS. Other platforms have not yet been validated.
-
-Recognition is designed to tolerate moderate differences in brightness and capture appearance, but accuracy may vary depending on the capture device, scaling, capture-device image processing, or OBS filters. Capture devices beyond the development and test setup have not been broadly validated.
+Packaged builds have been exercised on Apple silicon macOS and Windows x64. Recognition is designed to tolerate moderate differences in brightness and capture appearance, but accuracy may vary depending on the capture device, scaling, capture-device image processing, or OBS filters. Capture devices beyond the development and test setups have not been broadly validated.
 
 Arena ID recognition is restricted to the observed 30-character code alphabet `0123456789BCDFGHJKLMNPQRSTVWXY`; `A`, `E`, `I`, `O`, `U`, and `Z` are not treated as valid Arena ID characters.
 
 Arena ID recognition runs locally and does not require Internet access. OBS communication stays on `127.0.0.1:4455`.
 
-After a successful OBS connection, the WebSocket password, selected source, and horizontal crop offset are stored in the operating system's per-user application-data location so they do not need to be entered again on every launch. On macOS this is `~/Library/Application Support/SSBU Arena ID Reader/config.json`; on Windows it is `%APPDATA%\SSBU Arena ID Reader\config.json`. Existing macOS development settings from `~/.ssbu-arena-id-reader/config.json` are migrated automatically when the new settings file does not yet exist, without deleting the legacy file. On macOS, the settings file is set to mode `0600`.
+## Installation
 
-The OBS Source list refreshes automatically when its dropdown is opened, so there is no separate source-refresh step.
+Packaged application builds are distributed through GitHub Releases.
+
+### macOS
+
+1. Download `SSBU-Arena-ID-Reader-macOS-arm64.zip`.
+2. Extract the ZIP.
+3. Move `SSBU Arena ID Reader.app` to the **Applications** folder, or keep it in another user-writable folder if you intend to use **Save Image**.
+4. Open `SSBU Arena ID Reader.app`.
+
+The current macOS build targets Apple silicon. It is not signed with an Apple Developer ID or notarized, so macOS may require explicit approval before opening it for the first time.
+
+### Windows
+
+1. Download `SSBU-Arena-ID-Reader-Windows-x64.zip`.
+2. Extract the entire ZIP to a folder.
+3. Open the extracted `SSBU Arena ID Reader` folder.
+4. Run `SSBU Arena ID Reader.exe`.
+
+Do not run the executable directly from inside the ZIP. The executable depends on the bundled `_internal` directory, so keep the extracted application folder together. The current Windows build is unsigned, so Windows may display a security warning when it is opened for the first time.
+
+## First-time setup and use
+
+1. Open OBS Studio.
+2. Open **Tools > WebSocket Server Settings**.
+3. Enable the WebSocket server, keep the default port `4455`, and set a password.
+4. Start SSBU Arena ID Reader and enter the same WebSocket password.
+5. Open the **OBS Source** dropdown. The source list refreshes automatically.
+6. Select the capture-card input source itself rather than a composed OBS scene.
+7. In Super Smash Bros. Ultimate, open the Battle Arena screen where the 5-character Arena ID is visible.
+8. Press **Read ID**.
+
+The recognized Arena ID is displayed in the application and copied to the clipboard automatically.
+
+After a successful OBS connection, the WebSocket password, selected source, and horizontal crop offset are stored in the operating system's per-user application-data location so they do not need to be entered again on every launch. On macOS this is `~/Library/Application Support/SSBU Arena ID Reader/config.json`; on Windows it is `%APPDATA%\SSBU Arena ID Reader\config.json`. Existing macOS development settings from `~/.ssbu-arena-id-reader/config.json` are migrated automatically when the new settings file does not yet exist, without deleting the legacy file. On macOS, the settings file is set to mode `0600`.
 
 After a capture is available, the surrounding Arena ID area is shown above the recognition result and the red outline marks the fixed-size recognition crop. The outline can be dragged horizontally within a small range; releasing it saves the new position and performs a fresh read from OBS. The Arena ID field is editable, so recognition mistakes can be corrected before pressing **Save Image**. If recognition cannot produce a valid Arena ID at all, the captured crop remains available and the Arena ID can be entered manually before saving. During development from source, images are stored in the repository-local `template_samples/raw/` directory. In a packaged build, they are stored in `template_samples/raw/` beside the distributed executable or `.app`. The current Arena ID field is used as the filename, such as `JPQHX.png`. If that name already exists, a numeric suffix such as `JPQHX_002.png` is used instead of overwriting the earlier image. The development raw collection directory is ignored by Git.
 
-## Setup
+## Run from source
 
 ```bash
 uv sync --python 3.11
 uv run ssbu-arena-id-reader
 ```
-
-In OBS, open **Tools > WebSocket Server Settings**, enable the server, and use the default port `4455`. Enter the WebSocket password in SSBU Arena ID Reader, then open the **OBS Source** dropdown. The source list refreshes automatically. Select the capture-card input source itself rather than a composed scene.
 
 ## Build a macOS app
 
@@ -77,7 +107,7 @@ Extract the ZIP before running the application. The executable depends on the fi
 
 When **Save Image** is used from the packaged Windows application, `template_samples/raw/` is created beside `SSBU Arena ID Reader.exe`.
 
-The Windows packaging path can be validated by GitHub Actions without a local Windows development machine. Real Windows desktop operation with OBS should still be treated as unvalidated until it is exercised on Windows hardware.
+The Windows x64 packaging workflow has been validated on GitHub Actions, including the full test suite, PyInstaller packaging, bundled-template verification, and ZIP creation. The packaged application has also been exercised on Windows hardware through GUI launch, OBS connection, source selection, and Arena ID recognition.
 
 ## Recognition algorithm
 
