@@ -49,23 +49,36 @@ class FakeRecognition:
 
 class FakeRecognizer:
     def __init__(self) -> None:
-        self.results = iter(["JPQHX", "JPQHY", "JPQHX"])
-        self.last_result = ""
+        self.results = iter(
+            [
+                "JPQHX",
+                "JPQHY",
+                "JPQHX",
+                "JPQHX",
+                "JPQHY",
+            ]
+        )
+        self.results_by_image = {}
         self.detailed_calls = 0
 
     def ensure_ready(self) -> None:
         pass
 
     def recognize(self, image) -> str:
-        self.last_result = next(
+        result = next(
             self.results
         )
-        return self.last_result
+        self.results_by_image[
+            image
+        ] = result
+        return result
 
     def recognize_with_candidates(self, image):
         self.detailed_calls += 1
         return FakeRecognition(
-            self.last_result
+            self.results_by_image[
+                image
+            ]
         )
 
 
@@ -77,15 +90,26 @@ class AlwaysInvalidRecognizer:
         return "BAD"
 
 
-def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -> None:
+def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     FakeObsClient.calls = 0
 
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
     monkeypatch.setattr(app_module, "decode_png", lambda data: object())
+
+    rois = iter(
+        [
+            "roi-1",
+            "roi-2",
+            "roi-3",
+            "roi-4",
+            "roi-5",
+        ]
+    )
+
     monkeypatch.setattr(
         app_module,
         "extract_arena_id_roi",
-        lambda frame: "raw-roi",
+        lambda frame: next(rois),
     )
     monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
 
@@ -94,7 +118,7 @@ def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -
     app.recognizer = FakeRecognizer()
     app.password_var = FakeVar("fake-password")
     app.source_var = FakeVar("キャプボ")
-    app.sample_count_var = FakeVar("2")
+    app.sample_count_var = FakeVar("3")
     app.result_var = FakeVar()
     app.status_var = FakeVar()
 
@@ -119,11 +143,18 @@ def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -
 
     app._read_id()
 
-    assert FakeObsClient.calls == 3
+    assert FakeObsClient.calls == 5
     assert app.recognizer.detailed_calls == 1
     assert app.result_var.get() == "JPQHX"
     assert copied == ["JPQHX"]
-    assert previews == ["raw-roi", "raw-roi", "raw-roi"]
+    assert previews == [
+        "roi-1",
+        "roi-2",
+        "roi-3",
+        "roi-4",
+        "roi-5",
+        "roi-4",
+    ]
     assert cleared == [True]
     assert candidate_updates == [
         (
@@ -133,6 +164,59 @@ def test_read_id_automatically_rescues_split_after_selected_reads(monkeypatch) -
                 for character in "JPQHX"
             ),
         )
+    ]
+    assert app._last_sample_roi == "roi-4"
+    assert app.status_var.get() == "Copied JPQHX to the clipboard (5 reads)."
+
+
+def test_read_id_stops_after_three_identical_reads(monkeypatch) -> None:
+    FakeObsClient.calls = 0
+
+    monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
+    monkeypatch.setattr(app_module, "decode_png", lambda data: object())
+    monkeypatch.setattr(
+        app_module,
+        "extract_arena_id_roi",
+        lambda frame: "raw-roi",
+    )
+    monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
+
+    app = ArenaIdApp.__new__(ArenaIdApp)
+    app.root = FakeRoot()
+    app.recognizer = FakeRecognizer()
+    app.recognizer.results = iter(
+        [
+            "JPQHX",
+            "JPQHX",
+            "JPQHX",
+        ]
+    )
+    app.password_var = FakeVar("fake-password")
+    app.source_var = FakeVar("キャプボ")
+    app.sample_count_var = FakeVar("3")
+    app.result_var = FakeVar()
+    app.status_var = FakeVar()
+
+    copied = []
+    previews = []
+
+    app._copy_to_clipboard = copied.append
+    app._save_settings = lambda: None
+    app._set_busy = lambda busy: None
+    app._show_sample_preview = previews.append
+    app._clear_character_candidates = lambda: None
+    app._set_character_candidates = lambda arena_id, candidates: None
+
+    app._read_id()
+
+    assert FakeObsClient.calls == 3
+    assert app.recognizer.detailed_calls == 1
+    assert app.result_var.get() == "JPQHX"
+    assert copied == ["JPQHX"]
+    assert previews == [
+        "raw-roi",
+        "raw-roi",
+        "raw-roi",
     ]
     assert app._last_sample_roi == "raw-roi"
     assert app.status_var.get() == "Copied JPQHX to the clipboard (3 reads)."
@@ -301,8 +385,33 @@ def test_character_candidates_keep_similarity_order_and_selected_result() -> Non
     ]
 
     candidates = (
-        ("1", "L", "J"),
-        ("Y", "V"),
+        (
+            "1",
+            "J",
+            "T",
+            "C",
+            "6",
+            "B",
+            "4",
+            "2",
+            "5",
+            "8",
+            "L",
+            "M",
+        ),
+        (
+            "Y",
+            "V",
+            "T",
+            "W",
+            "X",
+            "F",
+            "M",
+            "3",
+            "8",
+            "7",
+            "1",
+        ),
         ("B", "8"),
         ("H", "N"),
         ("2", "3"),
@@ -319,13 +428,28 @@ def test_character_candidates_keep_similarity_order_and_selected_result() -> Non
     ] == list("LYBH2")
 
     assert app.candidate_boxes[0].values == (
-        "1",
         "L",
+        "1",
         "J",
+        "T",
+        "C",
+        "6",
+        "B",
+        "4",
+        "2",
+        "5",
     )
     assert app.candidate_boxes[1].values == (
         "Y",
         "V",
+        "T",
+        "W",
+        "X",
+        "F",
+        "M",
+        "3",
+        "8",
+        "7",
     )
 
 

@@ -22,6 +22,8 @@ from .settings import MAX_SAMPLE_COUNT, AppSettings, load_settings, save_setting
 
 SAMPLE_INTERVAL_SECONDS = 0.15
 SAMPLE_PREVIEW_SCALE = 2
+STABLE_READ_COUNT = 3
+MAX_DISPLAYED_CHARACTER_CANDIDATES = 10
 
 
 class ArenaIdApp:
@@ -33,7 +35,7 @@ class ArenaIdApp:
 
         self.password_var = tk.StringVar(value=settings.obs_password)
         self.source_var = tk.StringVar(value=settings.obs_source)
-        self.sample_count_var = tk.StringVar(value=str(settings.sample_count))
+        self.sample_count_var = tk.StringVar(value=str(STABLE_READ_COUNT))
         self.result_var = tk.StringVar()
         self.candidate_vars = [
             tk.StringVar()
@@ -229,8 +231,8 @@ class ArenaIdApp:
 
             self.recognizer.ensure_ready()
 
-            initial_reads = int(self.sample_count_var.get())
             candidates: list[str] = []
+            samples = []
             arena_id: str | None = None
             latest_roi = None
 
@@ -253,18 +255,33 @@ class ArenaIdApp:
                         latest_roi
                     )
                     candidates.append(candidate)
+                    samples.append(
+                        (
+                            candidate,
+                            latest_roi,
+                        )
+                    )
 
-                    if read_number >= initial_reads:
-                        try:
-                            arena_id = character_majority(candidates)
-                        except RecognitionError:
-                            if read_number == MAX_SAMPLE_COUNT:
-                                raise
-                        else:
+                    if read_number == STABLE_READ_COUNT:
+                        stable_candidate = candidates[0]
+
+                        if (
+                            len(stable_candidate) == ARENA_ID_LENGTH
+                            and all(
+                                candidate == stable_candidate
+                                for candidate in candidates
+                            )
+                        ):
+                            arena_id = stable_candidate
                             break
 
-                    if read_number < MAX_SAMPLE_COUNT:
-                        time.sleep(SAMPLE_INTERVAL_SECONDS)
+                    if read_number == MAX_SAMPLE_COUNT:
+                        arena_id = character_majority(
+                            candidates
+                        )
+                        break
+
+                    time.sleep(SAMPLE_INTERVAL_SECONDS)
 
             if arena_id is None:
                 raise RecognitionError(
@@ -274,11 +291,29 @@ class ArenaIdApp:
             if latest_roi is None:
                 raise RecognitionError("No Arena ID sample image was captured.")
 
-            self._last_sample_roi = latest_roi
+            representative_index = (
+                self._select_representative_read_index(
+                    samples,
+                    arena_id,
+                )
+            )
+            _, representative_roi = samples[
+                representative_index
+            ]
+
+            self._last_sample_roi = (
+                representative_roi
+            )
+
+            if representative_index != len(samples) - 1:
+                self._show_sample_preview(
+                    representative_roi
+                )
+                self.root.update_idletasks()
 
             recognition = (
                 self.recognizer.recognize_with_candidates(
-                    latest_roi
+                    representative_roi
                 )
             )
             latest_character_candidates = (
@@ -317,6 +352,41 @@ class ArenaIdApp:
             self._show_error(f"Unexpected error: {exc}")
         finally:
             self._set_busy(False)
+
+    def _select_representative_read_index(
+        self,
+        samples,
+        arena_id: str,
+    ) -> int:
+        if not samples:
+            raise RecognitionError(
+                "No Arena ID sample image was captured."
+            )
+
+        def ranking(index: int) -> tuple[bool, int, int]:
+            candidate, _ = samples[index]
+
+            if len(candidate) == ARENA_ID_LENGTH:
+                agreement = sum(
+                    candidate[position]
+                    == arena_id[position]
+                    for position in range(
+                        ARENA_ID_LENGTH
+                    )
+                )
+            else:
+                agreement = -1
+
+            return (
+                candidate == arena_id,
+                agreement,
+                index,
+            )
+
+        return max(
+            range(len(samples)),
+            key=ranking,
+        )
 
     def _show_sample_preview(self, roi) -> None:
         try:
@@ -399,7 +469,11 @@ class ArenaIdApp:
             )
 
             options = (
-                list(candidates[index])
+                list(
+                    candidates[index][
+                        :MAX_DISPLAYED_CHARACTER_CANDIDATES
+                    ]
+                )
                 if index < len(candidates)
                 else []
             )
@@ -408,10 +482,13 @@ class ArenaIdApp:
                 selected
                 and selected not in options
             ):
-                options.insert(
-                    0,
+                options = [
                     selected,
-                )
+                    *options[
+                        :MAX_DISPLAYED_CHARACTER_CANDIDATES
+                        - 1
+                    ],
+                ]
 
             box["values"] = tuple(
                 options
