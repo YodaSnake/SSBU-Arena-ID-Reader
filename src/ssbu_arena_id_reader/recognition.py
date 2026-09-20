@@ -22,17 +22,67 @@ def decode_png(data: bytes) -> np.ndarray:
     return image
 
 
-def extract_arena_id_roi(frame: np.ndarray) -> np.ndarray:
+def arena_id_roi_bounds(
+    frame: np.ndarray,
+    crop_offset_x: int = 0,
+) -> tuple[int, int, int, int]:
+    if frame is None or frame.size == 0:
+        raise RecognitionError("The capture frame is empty.")
+
     height, width = frame.shape[:2]
     base_width, base_height = ROI_BASE_SIZE
     x1, y1, x2, y2 = ROI_1080P
+
+    x1 += crop_offset_x
+    x2 += crop_offset_x
+
     left = round(width * x1 / base_width)
     top = round(height * y1 / base_height)
     right = round(width * x2 / base_width)
     bottom = round(height * y2 / base_height)
-    crop = frame[top:bottom, left:right]
+
+    if (
+        left < 0
+        or top < 0
+        or right > width
+        or bottom > height
+        or left >= right
+        or top >= bottom
+    ):
+        raise RecognitionError(
+            "The Arena ID crop position is outside the capture frame."
+        )
+
+    return (
+        left,
+        top,
+        right,
+        bottom,
+    )
+
+
+def extract_arena_id_roi(
+    frame: np.ndarray,
+    crop_offset_x: int = 0,
+) -> np.ndarray:
+    (
+        left,
+        top,
+        right,
+        bottom,
+    ) = arena_id_roi_bounds(
+        frame,
+        crop_offset_x,
+    )
+
+    crop = frame[
+        top:bottom,
+        left:right,
+    ]
+
     if crop.size == 0:
         raise RecognitionError("The Arena ID crop area is empty.")
+
     return crop.copy()
 
 

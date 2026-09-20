@@ -9,6 +9,7 @@ def test_settings_round_trip(tmp_path) -> None:
         obs_password="example-password",
         obs_source="キャプボ",
         sample_count=2,
+        crop_offset_x=-12,
     )
 
     save_settings(settings, path)
@@ -35,3 +36,15 @@ def test_invalid_sample_count_returns_default(tmp_path) -> None:
     path.write_text('{"sample_count": 9}', encoding="utf-8")
 
     assert load_settings(path).sample_count == 1
+
+
+def test_invalid_crop_offset_returns_default(tmp_path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"crop_offset_x": 1}',
+        encoding="utf-8",
+    )
+
+    settings = load_settings(path)
+
+    assert settings.crop_offset_x == 0

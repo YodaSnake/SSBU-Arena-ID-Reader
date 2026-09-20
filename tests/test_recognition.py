@@ -3,6 +3,7 @@ import pytest
 
 from ssbu_arena_id_reader.recognition import (
     RecognitionError,
+    arena_id_roi_bounds,
     character_majority,
     extract_arena_id_roi,
     preprocess_frame,
@@ -39,6 +40,31 @@ def test_extract_arena_id_roi_uses_reference_1080p_roi() -> None:
     frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
     crop = extract_arena_id_roi(frame)
     assert crop.shape == (30, 130, 3)
+
+
+def test_extract_arena_id_roi_applies_horizontal_reference_pixel_offset() -> None:
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    frame[100, 1778] = (11, 22, 33)
+    frame[129, 1907] = (44, 55, 66)
+
+    crop = extract_arena_id_roi(
+        frame,
+        crop_offset_x=-12,
+    )
+
+    assert crop.shape == (30, 130, 3)
+    assert tuple(crop[0, 0]) == (11, 22, 33)
+    assert tuple(crop[-1, -1]) == (44, 55, 66)
+
+
+def test_arena_id_roi_bounds_reject_position_outside_frame() -> None:
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+    with pytest.raises(RecognitionError):
+        arena_id_roi_bounds(
+            frame,
+            crop_offset_x=1,
+        )
 
 
 def test_preprocess_frame_uses_reference_1080p_roi() -> None:

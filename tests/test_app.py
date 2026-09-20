@@ -94,7 +94,21 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     FakeObsClient.calls = 0
 
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
-    monkeypatch.setattr(app_module, "decode_png", lambda data: object())
+
+    frames = iter(
+        [
+            "frame-1",
+            "frame-2",
+            "frame-3",
+            "frame-4",
+            "frame-5",
+        ]
+    )
+    monkeypatch.setattr(
+        app_module,
+        "decode_png",
+        lambda data: next(frames),
+    )
 
     rois = iter(
         [
@@ -109,7 +123,7 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     monkeypatch.setattr(
         app_module,
         "extract_arena_id_roi",
-        lambda frame: next(rois),
+        lambda frame, **kwargs: next(rois),
     )
     monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
 
@@ -121,6 +135,8 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     app.sample_count_var = FakeVar("3")
     app.result_var = FakeVar()
     app.status_var = FakeVar()
+    app.crop_offset_x = 0
+    app.crop_offset_y = 0
 
     copied = []
     previews = []
@@ -130,7 +146,7 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     app._copy_to_clipboard = copied.append
     app._save_settings = lambda: None
     app._set_busy = lambda busy: None
-    app._show_sample_preview = previews.append
+    app._show_crop_adjustment_preview = previews.append
     app._clear_character_candidates = lambda: cleared.append(True)
     app._set_character_candidates = (
         lambda arena_id, candidates: candidate_updates.append(
@@ -148,12 +164,12 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
     assert app.result_var.get() == "JPQHX"
     assert copied == ["JPQHX"]
     assert previews == [
-        "roi-1",
-        "roi-2",
-        "roi-3",
-        "roi-4",
-        "roi-5",
-        "roi-4",
+        "frame-1",
+        "frame-2",
+        "frame-3",
+        "frame-4",
+        "frame-5",
+        "frame-4",
     ]
     assert cleared == [True]
     assert candidate_updates == [
@@ -165,6 +181,7 @@ def test_read_id_uses_five_reads_after_early_disagreement(monkeypatch) -> None:
             ),
         )
     ]
+    assert app._last_sample_frame == "frame-4"
     assert app._last_sample_roi == "roi-4"
     assert app.status_var.get() == "Copied JPQHX to the clipboard (5 reads)."
 
@@ -173,11 +190,15 @@ def test_read_id_stops_after_three_identical_reads(monkeypatch) -> None:
     FakeObsClient.calls = 0
 
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
-    monkeypatch.setattr(app_module, "decode_png", lambda data: object())
+    monkeypatch.setattr(
+        app_module,
+        "decode_png",
+        lambda data: "full-frame",
+    )
     monkeypatch.setattr(
         app_module,
         "extract_arena_id_roi",
-        lambda frame: "raw-roi",
+        lambda frame, **kwargs: "raw-roi",
     )
     monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
 
@@ -196,6 +217,8 @@ def test_read_id_stops_after_three_identical_reads(monkeypatch) -> None:
     app.sample_count_var = FakeVar("3")
     app.result_var = FakeVar()
     app.status_var = FakeVar()
+    app.crop_offset_x = 0
+    app.crop_offset_y = 0
 
     copied = []
     previews = []
@@ -203,7 +226,7 @@ def test_read_id_stops_after_three_identical_reads(monkeypatch) -> None:
     app._copy_to_clipboard = copied.append
     app._save_settings = lambda: None
     app._set_busy = lambda busy: None
-    app._show_sample_preview = previews.append
+    app._show_crop_adjustment_preview = previews.append
     app._clear_character_candidates = lambda: None
     app._set_character_candidates = lambda arena_id, candidates: None
 
@@ -214,10 +237,11 @@ def test_read_id_stops_after_three_identical_reads(monkeypatch) -> None:
     assert app.result_var.get() == "JPQHX"
     assert copied == ["JPQHX"]
     assert previews == [
-        "raw-roi",
-        "raw-roi",
-        "raw-roi",
+        "full-frame",
+        "full-frame",
+        "full-frame",
     ]
+    assert app._last_sample_frame == "full-frame"
     assert app._last_sample_roi == "raw-roi"
     assert app.status_var.get() == "Copied JPQHX to the clipboard (3 reads)."
 
@@ -228,11 +252,15 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
     FakeObsClient.calls = 0
 
     monkeypatch.setattr(app_module, "ObsClient", FakeObsClient)
-    monkeypatch.setattr(app_module, "decode_png", lambda data: object())
+    monkeypatch.setattr(
+        app_module,
+        "decode_png",
+        lambda data: "full-frame",
+    )
     monkeypatch.setattr(
         app_module,
         "extract_arena_id_roi",
-        lambda frame: "raw-roi",
+        lambda frame, **kwargs: "raw-roi",
     )
     monkeypatch.setattr(app_module.time, "sleep", lambda seconds: None)
 
@@ -242,6 +270,8 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
     app.password_var = FakeVar("fake-password")
     app.source_var = FakeVar("キャプボ")
     app.sample_count_var = FakeVar("1")
+    app.crop_offset_x = 0
+    app.crop_offset_y = 0
     app.result_var = FakeVar("OLD12")
     app.status_var = FakeVar()
     app._last_sample_roi = "old-roi"
@@ -251,7 +281,7 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
     errors = []
     cleared = []
 
-    app._show_sample_preview = previews.append
+    app._show_crop_adjustment_preview = previews.append
     app._copy_to_clipboard = copied.append
     app._save_settings = lambda: None
     app._set_busy = lambda busy: None
@@ -262,12 +292,13 @@ def test_failed_recognition_keeps_latest_crop_available_for_manual_save(
 
     assert FakeObsClient.calls == 5
     assert app.result_var.get() == ""
+    assert app._last_sample_frame == "full-frame"
     assert app._last_sample_roi == "raw-roi"
-    assert previews == ["raw-roi"] * 5
+    assert previews == ["full-frame"] * 5
     assert copied == []
     assert cleared == [True]
     assert len(errors) == 1
-    assert "Enter the Arena ID manually and press Save Sample." in errors[0]
+    assert "Enter the Arena ID manually and press Save Image." in errors[0]
 
 
 class FakeSourceBox:
@@ -450,6 +481,221 @@ def test_character_candidates_keep_similarity_order_and_selected_result() -> Non
         "3",
         "8",
         "7",
+    )
+
+
+def test_crop_box_outline_stays_inside_canvas() -> None:
+    app = ArenaIdApp.__new__(
+        ArenaIdApp
+    )
+    app.crop_offset_x = 0
+
+    assert app._crop_box_canvas_coords() == (
+        50,
+        2,
+        308,
+        58,
+    )
+
+    app.crop_offset_x = -20
+
+    assert app._crop_box_canvas_coords() == (
+        10,
+        2,
+        270,
+        58,
+    )
+
+
+def test_horizontal_crop_drag_clamps_and_runs_adaptive_read_on_release() -> None:
+    class FakeEvent:
+        def __init__(self, x: int, y: int = 30) -> None:
+            self.x = x
+            self.y = y
+
+    app = ArenaIdApp.__new__(
+        ArenaIdApp
+    )
+    app._crop_adjustment_enabled = True
+    app._last_sample_frame = "full-frame"
+    app.crop_offset_x = 0
+    app._crop_drag_anchor_x = None
+    app._crop_drag_origin_x = None
+    app._crop_box_canvas_coords = lambda: (
+        50,
+        1,
+        309,
+        59,
+    )
+
+    updates = []
+    settings_saves = []
+    adaptive_reads = []
+
+    app._update_crop_box = (
+        lambda: updates.append(
+            app.crop_offset_x
+        )
+    )
+    app._save_settings = (
+        lambda: settings_saves.append(
+            app.crop_offset_x
+        )
+    )
+    app._read_id = (
+        lambda: adaptive_reads.append(
+            app.crop_offset_x
+        )
+    )
+
+    app._on_crop_drag_start(
+        FakeEvent(100)
+    )
+    app._on_crop_drag_motion(
+        FakeEvent(20)
+    )
+
+    assert app.crop_offset_x == -20
+
+    app._on_crop_drag_release(
+        FakeEvent(76)
+    )
+
+    assert app.crop_offset_x == -12
+    assert updates == [
+        -20,
+        -12,
+    ]
+    assert settings_saves == [-12]
+    assert adaptive_reads == [-12]
+    assert app._crop_drag_anchor_x is None
+    assert app._crop_drag_origin_x is None
+
+
+def test_manual_crop_adjustment_re_recognizes_retained_frame(
+    monkeypatch,
+) -> None:
+    extracted = []
+
+    def fake_extract(
+        frame,
+        *,
+        crop_offset_x,
+    ):
+        extracted.append(
+            (
+                frame,
+                crop_offset_x,
+            )
+        )
+        return "adjusted-roi"
+
+    class AdjustedRecognizer:
+        def recognize_with_candidates(
+            self,
+            image,
+        ):
+            assert image == "adjusted-roi"
+            return FakeRecognition(
+                "2MMHW"
+            )
+
+    monkeypatch.setattr(
+        app_module,
+        "extract_arena_id_roi",
+        fake_extract,
+    )
+
+    app = ArenaIdApp.__new__(
+        ArenaIdApp
+    )
+    app.root = FakeRoot()
+    app.recognizer = AdjustedRecognizer()
+    app.crop_offset_x = -12
+    app._last_sample_frame = "full-frame"
+    app._last_sample_roi = "old-roi"
+    app.result_var = FakeVar()
+    app.status_var = FakeVar()
+    app.save_sample_button = FakeButton()
+
+    copied = []
+    candidate_updates = []
+    settings_saves = []
+
+    app._copy_to_clipboard = copied.append
+    app._clear_character_candidates = lambda: None
+    app._set_character_candidates = (
+        lambda arena_id, candidates: candidate_updates.append(
+            (
+                arena_id,
+                candidates,
+            )
+        )
+    )
+    app._save_settings = (
+        lambda: settings_saves.append(
+            True
+        )
+    )
+
+    app._recognize_last_frame_with_current_crop()
+
+    assert extracted == [
+        (
+            "full-frame",
+            -12,
+        )
+    ]
+    assert app._last_sample_roi == "adjusted-roi"
+    assert app.result_var.get() == "2MMHW"
+    assert copied == ["2MMHW"]
+    assert candidate_updates == [
+        (
+            "2MMHW",
+            tuple(
+                (character,)
+                for character in "2MMHW"
+            ),
+        )
+    ]
+    assert app.save_sample_button.state == "normal"
+    assert settings_saves == [True]
+    assert (
+        app.status_var.get()
+        == "Crop adjusted. Copied 2MMHW to the clipboard."
+    )
+
+
+def test_reset_crop_restores_default_without_captured_frame() -> None:
+    app = ArenaIdApp.__new__(
+        ArenaIdApp
+    )
+    app.crop_offset_x = -12
+    app._last_sample_frame = None
+    app.status_var = FakeVar()
+
+    updates = []
+    settings_saves = []
+
+    app._update_crop_box = (
+        lambda: updates.append(
+            app.crop_offset_x
+        )
+    )
+    app._save_settings = (
+        lambda: settings_saves.append(
+            True
+        )
+    )
+
+    app._reset_crop()
+
+    assert app.crop_offset_x == 0
+    assert updates == [0]
+    assert settings_saves == [True]
+    assert (
+        app.status_var.get()
+        == "Crop position reset to default."
     )
 
 
